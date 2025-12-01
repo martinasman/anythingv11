@@ -1,75 +1,116 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { ArrowUp, Plus, Paperclip, ChevronDown, Search, Loader2, Check, Circle } from 'lucide-react';
+import { ArrowUp, Plus, Paperclip, ChevronDown, Search, Loader2 } from 'lucide-react';
 import Image from 'next/image';
-import { useProjectStore } from '@/store/projectStore';
-import { fetchModels, searchModels, type Model } from '@/lib/services/openRouter';
-import { detectIntent } from '@/lib/utils/intentDetector';
-
-// Progress tracking types
-interface ProgressStep {
-  toolName: string;
-  stepIndex: number;
-  text: string;
-  completed: boolean;
-}
-
-interface ToolProgress {
-  toolName: string;
-  displayName: string;
-  status: 'running' | 'complete';
-  duration?: string;
-  steps: ProgressStep[];
-}
+import { useProjectStore, type WorkspaceView } from '@/store/projectStore';
+import { useModelStore } from '@/store/modelStore';
+import { searchModels, type Model } from '@/lib/services/openRouter';
+import { TOOL_DISPLAY_NAMES } from '@/store/projectStore';
+import { WorkSection, type WorkItem, type ProgressStage } from './WorkSection';
+import { CodeChangeViewer, type CodeChange } from './CodeChangeViewer';
 
 interface ChatPanelProps {
   projectName?: string;
 }
 
-// Placeholder text based on editor mode
-const PLACEHOLDER_BY_MODE: Record<string, string> = {
-  bento: 'Ask anything...',
-  website: 'Edit your website...',
-  leads: 'Manage your leads...',
-  outreach: 'Refine your outreach...',
+// Placeholder text based on workspace view
+const PLACEHOLDER_BY_VIEW: Record<WorkspaceView, string> = {
+  HOME: 'Ask anything...',
+  SITE: 'Edit your website...',
+  BRAND: 'Refine your brand identity...',
+  FINANCE: 'Update your pricing and offer...',
+  CRM: 'Manage your leads and outreach...',
+};
+
+// Get placeholder based on context (lead-aware)
+const getPlaceholder = (workspaceView: WorkspaceView, currentLeadName: string | null): string => {
+  if (currentLeadName) {
+    return `Ask about ${currentLeadName}...`;
+  }
+  return PLACEHOLDER_BY_VIEW[workspaceView];
+};
+
+// Tool-specific emojis for context-aware loading messages
+const TOOL_EMOJIS: Record<string, string> = {
+  'perform_market_research': '🔍',
+  'generate_brand_identity': '✨',
+  'generate_business_plan': '📊',
+  'generate_website_files': '🌐',
+  'generate_first_week_plan': '📅',
+  'generate_leads': '🎯',
+  'generate_outreach_scripts': '📧',
+  'edit_website': '🌐',
+  'edit_identity': '✨',
+  'edit_pricing': '💰',
 };
 
 export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProps) {
-  const { project, messages: storeMessages, selectedModelId, setSelectedModelId, addMessage, updateMessage, setToolRunning, editorMode, setHasStartedGeneration, setWorkspaceView } = useProjectStore();
-  const [models, setModels] = useState<Model[]>([]);
+  const {
+    project,
+    messages: storeMessages,
+    selectedModelId,
+    setSelectedModelId,
+    addMessage,
+    updateMessage,
+    setToolRunning,
+    editorMode,
+    workspaceView,
+    setHasStartedGeneration,
+    setWorkspaceView,
+    // Canvas state for lead context
+    canvasState,
+    artifacts,
+    // Canvas state actions
+    setCanvasState,
+    startTool,
+    updateToolStage,
+    completeTool,
+    failTool,
+    resetTools,
+    refreshArtifact,
+  } = useProjectStore();
+
+  // Get current lead if viewing lead detail
+  const currentLead = canvasState.type === 'lead-detail'
+    ? artifacts.leads?.leads.find(l => l.id === canvasState.leadId)
+    : null;
+
+  // Use global model store (already loaded from homepage)
+  const { models, selectedModel, isLoading: modelsLoading, loadModels, setSelectedModel, getModelById } = useModelStore();
   const [filteredModels, setFilteredModels] = useState<Model[]>([]);
-  const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
-  const [modelsLoading, setModelsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [toolProgress, setToolProgress] = useState<Record<string, ToolProgress>>({});
+  const [workItems, setWorkItems] = useState<Record<string, WorkItem>>({});
+  const [codeChanges, setCodeChanges] = useState<Record<string, CodeChange[]>>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const submissionLockRef = useRef(false);
+  const handleSendMessageRef = useRef<((messageText?: string) => Promise<void>) | undefined>(undefined);
 
-  // Load models on mount
+  // Load models if not already loaded (fallback for direct navigation)
   useEffect(() => {
-    async function loadModels() {
-      try {
-        const fetchedModels = await fetchModels();
-        setModels(fetchedModels);
-        setFilteredModels(fetchedModels);
+    loadModels();
+  }, [loadModels]);
 
-        const currentModel = fetchedModels.find((m) => m.id === selectedModelId);
-        setSelectedModel(currentModel || fetchedModels[0]);
-        setModelsLoading(false);
-      } catch (error) {
-        console.error('Failed to load models:', error);
-        setModelsLoading(false);
+  // Sync selected model with project's model ID
+  useEffect(() => {
+    if (selectedModelId && models.length > 0) {
+      const projectModel = getModelById(selectedModelId);
+      if (projectModel && projectModel.id !== selectedModel?.id) {
+        setSelectedModel(projectModel);
       }
     }
+  }, [selectedModelId, models, selectedModel?.id, getModelById, setSelectedModel]);
 
-    loadModels();
-  }, [selectedModelId]);
+  // Initialize filtered models when models load
+  useEffect(() => {
+    setFilteredModels(models);
+  }, [models]);
 
   // Handle search
   useEffect(() => {
@@ -106,11 +147,21 @@ export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProp
   // Handle message submission
   const handleSendMessage = useCallback(async (messageText?: string) => {
     const textToSend = messageText || input.trim();
-    console.log('[ChatPanel] handleSendMessage called', { textToSend, isLoading, projectId: project?.id });
+    console.log('[ChatPanel] handleSendMessage called', { textToSend, isLoading, projectId: project?.id, locked: submissionLockRef.current });
+
+    // Prevent double submission with lock
+    if (submissionLockRef.current) {
+      console.log('[ChatPanel] Submission blocked - already in progress');
+      return;
+    }
+
     if (!textToSend || isLoading || !project?.id) {
       console.warn('[ChatPanel] Early return:', { hasText: !!textToSend, isLoading, hasProject: !!project?.id });
       return;
     }
+
+    // Acquire lock
+    submissionLockRef.current = true;
 
     // Clear input immediately
     setInput('');
@@ -129,16 +180,14 @@ export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProp
     };
     addMessage(userMessage);
 
-    // Detect intent for context-aware loading message
-    const { emoji, loadingMessage } = detectIntent(textToSend);
-
-    // Create placeholder assistant message with context-aware status
+    // Create placeholder assistant message with generic "Thinking..."
+    // (will be updated when actual tool starts with context-aware message)
     const assistantMessageId = crypto.randomUUID();
     const assistantMessage = {
       id: assistantMessageId,
       project_id: project.id,
       role: 'assistant' as const,
-      content: `${emoji} ${loadingMessage}`,
+      content: '💭 Thinking...',
       created_at: new Date().toISOString(),
     };
     addMessage(assistantMessage);
@@ -152,11 +201,12 @@ export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProp
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [
-            ...storeMessages.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: textToSend }
+            ...storeMessages.map(m => ({ role: m.role, content: m.content, id: m.id })),
+            { role: 'user', content: textToSend, id: userMessage.id }
           ],
           projectId: project.id,
           modelId: selectedModelId,
+          assistantMessageId, // Pass assistant message ID for DB save
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -191,8 +241,13 @@ export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProp
         'generate_outreach_scripts': 'CRM',
       };
 
-      // Reset progress tracking
-      setToolProgress({});
+      // Reset work items and code changes tracking
+      setWorkItems({});
+      setCodeChanges({});
+      resetTools(); // Reset canvas tool statuses
+
+      // Track if we've started any tools (for canvas state transition)
+      let hasStartedAnyTool = false;
 
       // Read the plain text stream and update message progressively
       const reader = response.body?.getReader();
@@ -211,83 +266,225 @@ export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProp
             Object.values(toolNameToType).forEach(toolType => {
               setToolRunning(toolType, false);
             });
+
+            // Transition to overview only if artifacts actually exist
+            // Don't show overview before website/brand/etc are ready
+            if (hasStartedAnyTool) {
+              const { artifacts } = useProjectStore.getState();
+              const hasArtifacts = Object.values(artifacts).some(a => a !== null);
+
+              if (hasArtifacts) {
+                // Small delay to let the user see the completion state
+                setTimeout(() => {
+                  setCanvasState({ type: 'overview' });
+                }, 500);
+              } else {
+                // Stay on loading canvas - artifacts still being processed
+                console.log('[ChatPanel] Stream complete but no artifacts yet - staying on loading');
+              }
+            }
+
             // If no text was received, show completion message
             if (!hasReceivedText || assistantContent.trim() === '') {
-              updateMessage(assistantMessageId, '✅ All tasks completed successfully!');
+              updateMessage(assistantMessageId, 'Your business is ready.');
             }
             break;
           }
 
           const chunk = decoder.decode(value, { stream: true });
 
-          // Parse progress markers: [PROGRESS:toolName:status:displayName] or [PROGRESS:toolName:complete:displayName:duration]
-          const progressMatches = chunk.matchAll(/\[PROGRESS:(\w+):(start|complete):([^:\]]+)(?::([^\]]+))?\]/g);
-          for (const match of progressMatches) {
-            const [, toolName, status, displayName, duration] = match;
+          // Parse [WORK:tool:description] markers (tool started)
+          const workMatches = chunk.matchAll(/\[WORK:(\w+):([^\]]+)\]/g);
+          for (const match of workMatches) {
+            const [, toolName, description] = match;
             const toolType = toolNameToType[toolName];
 
-            if (status === 'start') {
-              setToolProgress(prev => ({
-                ...prev,
-                [toolName]: {
-                  toolName,
-                  displayName,
-                  status: 'running',
-                  steps: [],
-                },
-              }));
-              if (toolType) setToolRunning(toolType, true);
-            } else if (status === 'complete') {
-              setToolProgress(prev => ({
-                ...prev,
-                [toolName]: {
-                  ...prev[toolName],
-                  status: 'complete',
-                  duration,
-                },
-              }));
-              if (toolType) setToolRunning(toolType, false);
+            // Only show loading canvas for generation tools, NOT edit tools
+            // Edit tools should update in place without the full loading screen
+            // generate_leads should NOT show loading canvas - it's a conversational flow
+            const isGenerationTool = toolName.startsWith('generate_') || toolName === 'perform_market_research';
+            const skipLoadingCanvas = toolName === 'generate_leads';
+            if (!hasStartedAnyTool && isGenerationTool && !skipLoadingCanvas) {
+              hasStartedAnyTool = true;
+              setCanvasState({ type: 'loading' });
+            }
 
-              // AI Auto-switch: Navigate to relevant view when tool completes
-              const targetView = toolNameToView[toolName];
-              if (targetView) {
-                setWorkspaceView(targetView);
-              }
+            // Update local work items state
+            setWorkItems(prev => ({
+              ...prev,
+              [toolName]: {
+                toolName,
+                description,
+                status: 'running',
+              },
+            }));
+
+            // Update global canvas tool status
+            startTool(toolName);
+
+            if (toolType) setToolRunning(toolType, true);
+
+            // Update assistant message with context-aware loading text
+            const emoji = TOOL_EMOJIS[toolName] || '⚙️';
+            const displayName = TOOL_DISPLAY_NAMES[toolName] || description;
+            updateMessage(assistantMessageId, `${emoji} ${displayName}...`);
+          }
+
+          // Tool name to artifact type for refresh
+          const toolNameToArtifactType: Record<string, 'website_code' | 'identity' | 'market_research' | 'business_plan' | 'leads' | 'outreach'> = {
+            'generate_website_files': 'website_code',
+            'edit_website': 'website_code',
+            'generate_brand_identity': 'identity',
+            'edit_identity': 'identity',
+            'perform_market_research': 'market_research',
+            'generate_business_plan': 'business_plan',
+            'edit_pricing': 'business_plan',
+            'generate_leads': 'leads',
+            'generate_outreach_scripts': 'outreach',
+          };
+
+          // Parse [WORK_DONE:tool:duration] markers (tool completed)
+          const doneMatches = chunk.matchAll(/\[WORK_DONE:(\w+):([^\]]+)\]/g);
+          for (const match of doneMatches) {
+            const [, toolName, duration] = match;
+            const toolType = toolNameToType[toolName];
+
+            // Update local work items state
+            setWorkItems(prev => ({
+              ...prev,
+              [toolName]: {
+                ...prev[toolName],
+                status: 'complete',
+                duration,
+              },
+            }));
+
+            // Update global canvas tool status
+            completeTool(toolName, duration);
+
+            if (toolType) setToolRunning(toolType, false);
+
+            // AI Auto-switch: Navigate to relevant view when tool completes
+            const targetView = toolNameToView[toolName];
+            if (targetView) {
+              setWorkspaceView(targetView);
+            }
+
+            // Fallback: Manually refresh artifact from database after tool completes
+            // This ensures the UI updates even if Supabase Realtime doesn't fire
+            const artifactType = toolNameToArtifactType[toolName];
+            if (artifactType) {
+              console.log('[ChatPanel] Refreshing artifact after tool completion:', artifactType);
+              // Longer delay for leads to ensure database has been updated
+              const delay = toolName === 'generate_leads' ? 1500 : 500;
+              setTimeout(async () => {
+                console.log('[ChatPanel] Executing refresh for:', artifactType);
+                await refreshArtifact(artifactType);
+                // For leads, do a second refresh after another delay to be safe
+                if (toolName === 'generate_leads') {
+                  setTimeout(() => {
+                    console.log('[ChatPanel] Second refresh for leads');
+                    refreshArtifact(artifactType);
+                  }, 2000);
+                }
+              }, delay);
             }
           }
 
-          // Parse step markers: [STEP:toolName:stepIndex:stepText]
-          const stepMatches = chunk.matchAll(/\[STEP:(\w+):(\d+):([^\]]+)\]/g);
-          for (const match of stepMatches) {
-            const [, toolName, stepIndexStr, stepText] = match;
-            const stepIndex = parseInt(stepIndexStr, 10);
+          // Parse [WORK_ERROR:tool:message] markers (tool failed)
+          const errorMatches = chunk.matchAll(/\[WORK_ERROR:(\w+):([^\]]+)\]/g);
+          for (const match of errorMatches) {
+            const [, toolName, errorMessage] = match;
+            const toolType = toolNameToType[toolName];
 
-            setToolProgress(prev => {
-              const tool = prev[toolName];
-              if (!tool) return prev;
+            console.error('[ChatPanel] Tool failed:', toolName, errorMessage);
 
-              const steps = [...tool.steps];
-              steps[stepIndex] = {
-                toolName,
-                stepIndex,
-                text: stepText,
-                completed: false,
-              };
+            // Update local work items state
+            setWorkItems(prev => ({
+              ...prev,
+              [toolName]: {
+                ...prev[toolName],
+                status: 'error',
+                errorMessage,
+              },
+            }));
 
-              // Mark previous steps as completed
-              for (let i = 0; i < stepIndex; i++) {
-                if (steps[i]) steps[i].completed = true;
-              }
+            // Update global canvas tool status
+            failTool(toolName, errorMessage);
+
+            if (toolType) setToolRunning(toolType, false);
+          }
+
+          // Parse [CODE_CHANGE:file:description|before|after] markers
+          const codeChangeMatches = chunk.matchAll(/\[CODE_CHANGE:([^:]+):([^\]|]+)(?:\|([^|]+)\|([^|]+))?\]/g);
+          for (const match of codeChangeMatches) {
+            const [, file, description, before, after] = match;
+
+            setCodeChanges(prev => ({
+              ...prev,
+              [assistantMessageId]: [
+                ...(prev[assistantMessageId] || []),
+                {
+                  file,
+                  description,
+                  before,
+                  after,
+                  timestamp: Date.now(),
+                  status: 'complete',
+                },
+              ],
+            }));
+          }
+
+          // Parse [PROGRESS:stage:message] markers for multi-stage progress
+          const progressMatches = chunk.matchAll(/\[PROGRESS:([^:]+):([^\]]+)\]/g);
+          for (const match of progressMatches) {
+            const [, stageId, message] = match;
+
+            setWorkItems(prev => {
+              // Find the currently running tool to add this stage to
+              const runningToolName = Object.keys(prev).find(k => prev[k].status === 'running');
+              if (!runningToolName) return prev;
+
+              // Also update global tool status for LoadingCanvas
+              updateToolStage(runningToolName, message);
+
+              const currentTool = prev[runningToolName];
+              const existingStages = currentTool.stages || [];
+
+              // Mark previous stages as complete, add new stage as active
+              const updatedStages: ProgressStage[] = existingStages.map(s => ({
+                ...s,
+                status: 'complete' as const,
+              }));
+
+              // Add the new stage as active
+              updatedStages.push({
+                id: stageId,
+                message,
+                status: 'active',
+                timestamp: Date.now(),
+              });
 
               return {
                 ...prev,
-                [toolName]: { ...tool, steps },
+                [runningToolName]: {
+                  ...currentTool,
+                  currentStage: stageId,
+                  stages: updatedStages,
+                },
               };
             });
           }
 
-          // Remove all markers from displayed content
+          // Remove all markers from displayed content (including legacy markers for backwards compatibility)
           const cleanChunk = chunk
+            .replace(/\[WORK:\w+:[^\]]+\]\n?/g, '')
+            .replace(/\[WORK_DONE:\w+:[^\]]+\]\n?/g, '')
+            .replace(/\[WORK_ERROR:\w+:[^\]]+\]\n?/g, '')
+            .replace(/\[CODE_CHANGE:[^\]]+\]\n?/g, '')
+            // Legacy marker cleanup (backwards compatibility during transition)
+            .replace(/\[THINKING\][^\n]*\n?/g, '')
             .replace(/\[PROGRESS:[^\]]+\]\n?/g, '')
             .replace(/\[STEP:[^\]]+\]\n?/g, '')
             .replace(/\[TOOL_START:\w+\]\n?/g, '')
@@ -312,30 +509,36 @@ export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProp
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      submissionLockRef.current = false; // Release lock
     }
   }, [project?.id, isLoading, input, storeMessages, selectedModelId, addMessage, updateMessage, setToolRunning, setHasStartedGeneration, setWorkspaceView]);
 
+  // Keep ref updated with latest handleSendMessage
+  useEffect(() => {
+    handleSendMessageRef.current = handleSendMessage;
+  }, [handleSendMessage]);
+
   // Listen for auto-submit event from WorkspaceHydration
+  // IMPORTANT: Use ref to avoid re-registering listener when handleSendMessage changes
   useEffect(() => {
     const handleAutoSubmit = (event: CustomEvent) => {
       console.log('[ChatPanel] autoSubmitPrompt event received', event.detail);
       const { prompt } = event.detail;
-      console.log('[ChatPanel] Auto-submit check:', { prompt, isLoading, hasProject: !!project?.id });
-      if (prompt && !isLoading && project?.id) {
-        console.log('[ChatPanel] Auto-submitting prompt:', prompt);
-        setInput(prompt);
-        handleSendMessage(prompt);
+      if (prompt && handleSendMessageRef.current) {
+        console.log('[ChatPanel] Auto-submitting prompt via ref:', prompt);
+        handleSendMessageRef.current(prompt);
       } else {
-        console.warn('[ChatPanel] Auto-submit blocked:', { hasPrompt: !!prompt, isLoading, hasProject: !!project?.id });
+        console.warn('[ChatPanel] Auto-submit blocked - no ref or prompt');
       }
     };
 
-    console.log('[ChatPanel] Setting up autoSubmitPrompt listener');
+    console.log('[ChatPanel] Setting up autoSubmitPrompt listener (stable)');
     window.addEventListener('autoSubmitPrompt', handleAutoSubmit as EventListener);
     return () => {
+      console.log('[ChatPanel] Removing autoSubmitPrompt listener');
       window.removeEventListener('autoSubmitPrompt', handleAutoSubmit as EventListener);
     };
-  }, [isLoading, project?.id, handleSendMessage]);
+  }, []); // Empty deps - listener stays stable, uses ref for latest function
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -358,7 +561,8 @@ export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProp
               const isLastMessage = index === storeMessages.length - 1;
               const isStreaming = isLastMessage && isLoading && message.role === 'assistant';
               const isInitialLoading = isStreaming && message.content.startsWith('⏳');
-              const hasProgress = isLastMessage && isLoading && Object.keys(toolProgress).length > 0;
+              const hasWorkItems = isLastMessage && Object.keys(workItems).length > 0;
+              const hasCodeChanges = codeChanges[message.id] && codeChanges[message.id].length > 0;
 
               return (
                 <div
@@ -367,7 +571,7 @@ export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProp
                 >
                   {message.role === 'user' ? (
                     /* User message - keep in bubble */
-                    <div className="max-w-[80%] rounded-2xl px-4 py-3 text-sm bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
+                    <div className="max-w-[80%] rounded-2xl px-4 py-3 text-sm bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100">
                       {message.content}
                     </div>
                   ) : (
@@ -392,63 +596,44 @@ export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProp
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        {/* Progress Display */}
-                        {hasProgress && (
-                          <div className="mb-4 space-y-3">
-                            {Object.values(toolProgress).map((tool) => (
-                              <div key={tool.toolName} className="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 p-3">
-                                <div className="flex items-center gap-2 mb-2">
-                                  {tool.status === 'running' ? (
-                                    <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                                  ) : (
-                                    <Check className="h-4 w-4 text-green-500" />
-                                  )}
-                                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
-                                    {tool.displayName}
-                                  </span>
-                                  {tool.duration && (
-                                    <span className="text-xs text-zinc-400 ml-auto">
-                                      {tool.duration}
-                                    </span>
-                                  )}
-                                </div>
-                                {tool.steps.length > 0 && (
-                                  <div className="pl-6 space-y-1">
-                                    {tool.steps.map((step, i) => (
-                                      <div key={i} className="flex items-center gap-2 text-xs">
-                                        {step.completed || tool.status === 'complete' ? (
-                                          <Check className="h-3 w-3 text-green-500" />
-                                        ) : (
-                                          <Circle className="h-3 w-3 text-zinc-300 dark:text-zinc-600" />
-                                        )}
-                                        <span className={
-                                          step.completed || tool.status === 'complete'
-                                            ? 'text-zinc-500 dark:text-zinc-400'
-                                            : 'text-zinc-400 dark:text-zinc-500'
-                                        }>
-                                          {step.text}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                        {/* Work Section - collapsible progress display */}
+                        {hasWorkItems && (
+                          <WorkSection
+                            items={Object.values(workItems)}
+                            isStreaming={isLoading}
+                          />
                         )}
 
-                        {/* Message Content - no background */}
-                        {(!hasProgress || message.content.trim()) && (
+                        {/* Code Changes Viewer - show real-time code edits */}
+                        {hasCodeChanges && (
+                          <CodeChangeViewer
+                            changes={codeChanges[message.id]}
+                            isStreaming={isStreaming}
+                          />
+                        )}
+
+                        {/* Message Content */}
+                        {message.content.trim() && (
                           <div className="text-sm text-zinc-900 dark:text-zinc-100 whitespace-pre-wrap leading-relaxed">
-                            {isInitialLoading && !hasProgress ? (
+                            {isInitialLoading ? (
                               <div className="flex items-center gap-2">
-                                <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
-                                <span className="text-zinc-500">{message.content.replace(/^[^\s]+\s/, '')}</span>
+                                <span className="relative flex h-4 w-4">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500"></span>
+                                </span>
+                                <span className="text-zinc-600 dark:text-zinc-400">
+                                  {message.content.replace(/^[^\s]+\s/, '')}
+                                  <span className="inline-flex ml-1">
+                                    <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
+                                    <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
+                                    <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
+                                  </span>
+                                </span>
                               </div>
                             ) : (
                               <>
                                 {message.content}
-                                {isStreaming && !hasProgress && (
+                                {isStreaming && (
                                   <span className="inline-block ml-1 w-2 h-4 bg-zinc-400 dark:bg-zinc-500 animate-pulse" />
                                 )}
                               </>
@@ -478,7 +663,7 @@ export default function ChatPanel({ projectName = 'New Project' }: ChatPanelProp
                   handleSubmit(e as any);
                 }
               }}
-              placeholder={PLACEHOLDER_BY_MODE[editorMode] || 'Ask anything...'}
+              placeholder={getPlaceholder(workspaceView, currentLead?.companyName ?? null)}
               className="w-full pl-4 pr-12 pt-3 pb-12 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 resize-none focus:outline-none bg-transparent rounded-2xl"
               rows={1}
               style={{ minHeight: '120px' }}

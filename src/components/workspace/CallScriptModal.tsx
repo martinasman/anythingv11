@@ -101,9 +101,9 @@ ${callScript.closeAttempt}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-slate-800 bg-blue-50 dark:bg-blue-900/20">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-slate-800 bg-blue-500/10 dark:bg-blue-500/20">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full btn-primary flex items-center justify-center">
               <Phone size={20} className="text-white" />
             </div>
             <div>
@@ -273,7 +273,7 @@ ${callScript.closeAttempt}
           </button>
           <button
             onClick={handleCopyAll}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium btn-primary text-white rounded-lg transition-colors"
           >
             {copied ? <Check size={16} /> : <Copy size={16} />}
             {copied ? 'Copied!' : 'Copy Full Script'}

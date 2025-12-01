@@ -1,8 +1,20 @@
 import { z } from 'zod';
 import { generateText } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import type { BusinessPlanArtifact } from '@/types/database';
+
+// ============================================
+// TYPES
+// ============================================
+
+export interface ProgressUpdate {
+  type: 'stage' | 'change';
+  stage?: string;
+  message?: string;
+}
+
+type ProgressCallback = (update: ProgressUpdate) => Promise<void>;
 
 // ============================================
 // SCHEMA DEFINITION
@@ -16,15 +28,21 @@ export const editPricingSchema = z.object({
 // TOOL IMPLEMENTATION
 // ============================================
 
-export async function editPricing(params: z.infer<typeof editPricingSchema> & { projectId: string }) {
-  const { editInstructions, projectId } = params;
+export async function editPricing(params: z.infer<typeof editPricingSchema> & { projectId: string; onProgress?: ProgressCallback }) {
+  const { editInstructions, projectId, onProgress } = params;
 
   try {
     console.log('[Edit Pricing] 💰 Starting pricing edit...');
     console.log('[Edit Pricing] Instructions:', editInstructions);
 
+    // Stage 1: Fetching current pricing
+    await onProgress?.({ type: 'stage', stage: 'fetch', message: 'Loading your current pricing...' });
+
     // 1. Fetch current business plan artifact
-    const supabase = await createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
     const { data: artifact, error: fetchError } = await (supabase
       .from('artifacts') as any)
       .select('*')
@@ -39,6 +57,9 @@ export async function editPricing(params: z.infer<typeof editPricingSchema> & { 
 
     const currentPlan = artifact.data as BusinessPlanArtifact;
     console.log('[Edit Pricing] Current plan has', currentPlan.pricingTiers?.length || 0, 'tiers');
+
+    // Stage 2: Analyzing changes
+    await onProgress?.({ type: 'stage', stage: 'analyze', message: 'Analyzing what needs to change...' });
 
     // 2. Use AI to determine what changes to make
     const openrouter = createOpenRouter({
@@ -83,6 +104,9 @@ Important:
 - Features and deliverables should be arrays of strings
 - Keep the overall structure intact`;
 
+    // Stage 3: Generating updates
+    await onProgress?.({ type: 'stage', stage: 'generate', message: 'Generating updated pricing...' });
+
     const { text } = await generateText({
       model: openrouter('anthropic/claude-3.5-sonnet'),
       prompt,
@@ -99,6 +123,9 @@ Important:
       console.error('[Edit Pricing] Failed to parse:', text.slice(0, 500));
       throw new Error('Failed to parse AI response');
     }
+
+    // Stage 4: Saving
+    await onProgress?.({ type: 'stage', stage: 'save', message: 'Saving your updates...' });
 
     // 4. Save updated artifact
     const { data: updatedArtifact, error: saveError } = await (supabase

@@ -15,7 +15,7 @@ export default function HeroSection() {
   }, []);
 
   return (
-    <section className="relative pt-32 pb-16 sm:pt-40 sm:pb-24">
+    <section className="relative pt-40 pb-24 sm:pt-48 sm:pb-32">
       <Container size="md" className="text-center">
         {/* Logo */}
         <div className="mb-8 animate-fade-in">
@@ -32,16 +32,16 @@ export default function HeroSection() {
         </div>
 
         {/* Headline */}
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-zinc-900 dark:text-slate-100 mb-6 animate-fade-in-up">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-zinc-900 dark:text-neutral-100 mb-6 animate-fade-in-up">
           Turn Any Idea Into a{' '}
-          <span className="bg-gradient-to-r from-purple-600 via-pink-500 to-blue-500 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-blue-500 via-blue-400 to-blue-600 bg-clip-text text-transparent">
             Business
           </span>{' '}
           in Minutes
         </h1>
 
         {/* Subheadline */}
-        <p className="text-lg sm:text-xl text-zinc-600 dark:text-slate-400 mb-8 max-w-2xl mx-auto animate-fade-in-up stagger-1">
+        <p className="text-lg sm:text-xl text-zinc-600 dark:text-neutral-400 mb-8 max-w-2xl mx-auto animate-fade-in-up stagger-1">
           Describe your vision and our AI generates market research, brand identity,
           and a complete website — all in seconds.
         </p>
@@ -52,7 +52,7 @@ export default function HeroSection() {
         </div>
 
         {/* Trust badge */}
-        <p className="mt-6 text-sm text-zinc-500 dark:text-slate-500 animate-fade-in stagger-3">
+        <p className="mt-6 text-sm text-zinc-500 dark:text-neutral-500 animate-fade-in stagger-3">
           No credit card required • 50 free credits to start
         </p>
       </Container>

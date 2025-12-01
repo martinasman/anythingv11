@@ -3,48 +3,35 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Paperclip, ChevronDown, Globe, Lightbulb, Mic, ArrowUp, Search } from 'lucide-react';
-import { fetchModels, searchModels, type Model } from '@/lib/services/openRouter';
-import { createClient } from '@/utils/supabase/client';
+import { searchModels, type Model } from '@/lib/services/openRouter';
 import { useAuth } from '@/contexts/AuthContext';
+import { useModelStore } from '@/store/modelStore';
 
 export default function HeroInput() {
   const router = useRouter();
   const { user } = useAuth();
   const [value, setValue] = useState('');
-  const [models, setModels] = useState<Model[]>([]);
   const [filteredModels, setFilteredModels] = useState<Model[]>([]);
-  const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [webEnabled, setWebEnabled] = useState(false);
   const [thinkEnabled, setThinkEnabled] = useState(false);
-  const [modelsLoading, setModelsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Load models on mount
+  // Use global model store
+  const { models, selectedModel, isLoading: modelsLoading, loadModels, setSelectedModel } = useModelStore();
+
+  // Load models on mount (will skip if already loaded)
   useEffect(() => {
-    async function loadModels() {
-      try {
-        const fetchedModels = await fetchModels();
-        setModels(fetchedModels);
-        setFilteredModels(fetchedModels);
-
-        // Set default model (Gemini 3 Pro if available)
-        const defaultModel =
-          fetchedModels.find((m) => m.id === 'google/gemini-3-pro-preview') ||
-          fetchedModels[0];
-        setSelectedModel(defaultModel);
-        setModelsLoading(false);
-      } catch (error) {
-        console.error('Failed to load models:', error);
-        setModelsLoading(false);
-      }
-    }
-
     loadModels();
-  }, []);
+  }, [loadModels]);
+
+  // Initialize filtered models when models load
+  useEffect(() => {
+    setFilteredModels(models);
+  }, [models]);
 
   // Handle search
   useEffect(() => {
@@ -73,7 +60,7 @@ export default function HeroInput() {
 
   const hasInput = value.trim().length > 0;
 
-  // Handle form submission
+  // Handle form submission - navigate immediately, create project in workspace
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasInput || isSubmitting) return;
@@ -90,31 +77,10 @@ export default function HeroInput() {
 
     setIsSubmitting(true);
 
-    try {
-      // Create new project in Supabase
-      const supabase = createClient();
-      const { data: project, error } = await (supabase
-        .from('projects') as any)
-        .insert({
-          name: value.slice(0, 50), // Use first 50 chars as project name
-          description: value,
-          status: 'active',
-          user_id: user.id, // Use authenticated user's ID
-          model_id: selectedModel?.id || 'google/gemini-3-pro-preview',
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Redirect to workspace with initial prompt
-      const encodedPrompt = encodeURIComponent(value);
-      router.push(`/p/${project.id}?prompt=${encodedPrompt}`);
-    } catch (error) {
-      console.error('Failed to create project:', error);
-      setIsSubmitting(false);
-      alert('Failed to create project. Please try again.');
-    }
+    // Navigate immediately - project creation happens in the new page
+    const encodedPrompt = encodeURIComponent(value);
+    const modelId = selectedModel?.id || 'google/gemini-3-pro-preview';
+    router.push(`/p/new?prompt=${encodedPrompt}&model=${encodeURIComponent(modelId)}`);
   };
 
   return (
@@ -126,13 +92,13 @@ export default function HeroInput() {
           <div
             className="absolute inset-0 rounded-2xl opacity-40 animate-gradient-flow"
             style={{
-              background: 'linear-gradient(90deg, rgba(139,92,246,0.3) 0%, rgba(236,72,153,0.3) 25%, rgba(59,130,246,0.3) 50%, rgba(139,92,246,0.3) 100%)',
+              background: 'linear-gradient(90deg, rgba(227,158,28,0.3) 0%, rgba(245,176,60,0.3) 25%, rgba(209,138,16,0.3) 50%, rgba(227,158,28,0.3) 100%)',
               backgroundSize: '200% 200%',
             }}
           />
 
           {/* Main Chatbox */}
-          <div className="relative bg-white dark:bg-slate-900 border border-zinc-200/50 dark:border-slate-700/50 rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] overflow-visible transition-colors">
+          <div className="relative border border-zinc-200/50 dark:border-slate-700/50 rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] overflow-visible transition-colors" style={{ background: 'var(--surface-1)' }}>
           <textarea
             value={value}
             onChange={(e) => setValue(e.target.value)}
@@ -286,7 +252,7 @@ export default function HeroInput() {
           <button
             type="submit"
             disabled={!hasInput || isSubmitting}
-            className="flex items-center justify-center w-8 h-8 bg-black dark:bg-white text-white dark:text-black hover:bg-zinc-800 dark:hover:bg-slate-200 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center w-8 h-8 btn-primary rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label={hasInput ? 'Send message' : 'Voice input'}
           >
             {isSubmitting ? (
@@ -301,25 +267,6 @@ export default function HeroInput() {
           </div>
         </div>
       </form>
-
-      {/* Custom CSS for gradient animation */}
-      <style jsx>{`
-        @keyframes gradient-flow {
-          0% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: 0% 50%;
-          }
-        }
-
-        .animate-gradient-flow {
-          animation: gradient-flow 8s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }

@@ -44,14 +44,14 @@ export const SHOWCASE_EXAMPLES: ShowcaseExample[] = [
       name: 'TechFlow',
       tagline: 'Where ideas become reality',
       logoSvg: `<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="30" cy="30" r="12" fill="#3B82F6"/>
-        <circle cx="70" cy="30" r="12" fill="#8B5CF6"/>
-        <circle cx="50" cy="70" r="12" fill="#06B6D4"/>
-        <line x1="38" y1="36" x2="44" y2="58" stroke="#3B82F6" stroke-width="3"/>
-        <line x1="62" y1="36" x2="56" y2="58" stroke="#8B5CF6" stroke-width="3"/>
-        <line x1="38" y1="30" x2="58" y2="30" stroke="#3B82F6" stroke-width="3"/>
+        <circle cx="30" cy="30" r="12" fill="#D97706"/>
+        <circle cx="70" cy="30" r="12" fill="#EA580C"/>
+        <circle cx="50" cy="70" r="12" fill="#B45309"/>
+        <line x1="38" y1="36" x2="44" y2="58" stroke="#D97706" stroke-width="3"/>
+        <line x1="62" y1="36" x2="56" y2="58" stroke="#EA580C" stroke-width="3"/>
+        <line x1="38" y1="30" x2="58" y2="30" stroke="#D97706" stroke-width="3"/>
       </svg>`,
-      colors: { primary: '#3B82F6', secondary: '#8B5CF6', accent: '#06B6D4' },
+      colors: { primary: '#D97706', secondary: '#EA580C', accent: '#B45309' },
       font: 'Inter',
     },
     research: {

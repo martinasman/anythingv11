@@ -10,6 +10,7 @@ import type {
   BusinessPlanArtifact,
   LeadsArtifact,
   OutreachArtifact,
+  FirstWeekPlanArtifact,
   Lead,
   LeadActivity,
 } from '@/types/database';
@@ -18,10 +19,42 @@ import type {
 // STATE INTERFACE
 // ============================================
 
-type ToolType = 'research' | 'identity' | 'website' | 'businessplan' | 'leads' | 'outreach';
+type ToolType = 'research' | 'identity' | 'website' | 'businessplan' | 'leads' | 'outreach' | 'firstweekplan';
 type EditorMode = 'bento' | 'website' | 'leads' | 'outreach';
 type ContextView = 'overview' | 'identity' | 'offer' | 'funnel' | 'leads' | 'legal';
 export type WorkspaceView = 'HOME' | 'BRAND' | 'CRM' | 'SITE' | 'FINANCE';
+
+// Canvas state types for loading/overview system
+export type CanvasState =
+  | { type: 'empty' }
+  | { type: 'loading' }
+  | { type: 'overview' }
+  | { type: 'detail'; view: 'website' | 'brand' | 'offer' | 'plan' | 'leads' }
+  | { type: 'lead-detail'; leadId: string };
+
+export interface ToolStatus {
+  name: string;
+  displayName: string;
+  status: 'pending' | 'running' | 'complete' | 'error';
+  startedAt?: number;
+  completedAt?: number;
+  duration?: string;
+  currentStage?: string; // Current stage message for dynamic progress
+}
+
+// Tool display names for loading canvas
+export const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  'perform_market_research': 'Researching your market',
+  'generate_brand_identity': 'Creating your brand',
+  'generate_business_plan': 'Setting up your offer',
+  'generate_website_files': 'Building your website',
+  'generate_first_week_plan': 'Planning your first week',
+  'generate_leads': 'Finding prospects',
+  'generate_outreach_scripts': 'Writing outreach scripts',
+  'edit_website': 'Updating your website',
+  'edit_identity': 'Updating your brand',
+  'edit_pricing': 'Updating your pricing',
+};
 
 interface ProjectState {
   // Core Data
@@ -34,6 +67,7 @@ interface ProjectState {
     businessPlan: BusinessPlanArtifact | null;
     leads: LeadsArtifact | null;
     outreach: OutreachArtifact | null;
+    firstWeekPlan: FirstWeekPlanArtifact | null;
   };
   selectedModelId: string;
 
@@ -46,6 +80,11 @@ interface ProjectState {
   contextView: ContextView;
   workspaceView: WorkspaceView;
   hasSeenOnboarding: boolean;
+
+  // Canvas state for loading/overview system
+  canvasState: CanvasState;
+  toolStatuses: Map<string, ToolStatus>;
+
 
   // Actions
   setInitialData: (
@@ -70,6 +109,20 @@ interface ProjectState {
   // Lead management actions
   updateLeadStatus: (leadId: string, status: Lead['status']) => Promise<void>;
   addLeadActivity: (activity: Omit<LeadActivity, 'id' | 'createdAt'>) => Promise<void>;
+
+  // First Week Plan actions
+  updateTaskCompletion: (taskId: string, completed: boolean) => Promise<void>;
+
+  // Canvas state actions
+  setCanvasState: (state: CanvasState) => void;
+  startTool: (toolName: string) => void;
+  updateToolStage: (toolName: string, stageMessage: string) => void;
+  completeTool: (toolName: string, duration?: string) => void;
+  failTool: (toolName: string, errorMessage: string) => void;
+  resetTools: () => void;
+
+  // Artifact refresh action (fallback for when realtime doesn't fire)
+  refreshArtifact: (type: ArtifactType) => Promise<void>;
 }
 
 // ============================================
@@ -87,6 +140,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     businessPlan: null,
     leads: null,
     outreach: null,
+    firstWeekPlan: null,
   },
   selectedModelId: 'anthropic/claude-3.5-sonnet',
   isLoading: false,
@@ -97,6 +151,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   contextView: 'overview' as ContextView,
   workspaceView: 'HOME' as WorkspaceView,
   hasSeenOnboarding: typeof window !== 'undefined' ? localStorage.getItem('hasSeenOnboarding') === 'true' : false,
+  canvasState: { type: 'empty' } as CanvasState,
+  toolStatuses: new Map<string, ToolStatus>(),
 
   // Actions
   setInitialData: (project, messages, rawArtifacts) => {
@@ -108,6 +164,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       businessPlan: null as BusinessPlanArtifact | null,
       leads: null as LeadsArtifact | null,
       outreach: null as OutreachArtifact | null,
+      firstWeekPlan: null as FirstWeekPlanArtifact | null,
     };
 
     // Parse raw artifacts into typed state
@@ -131,30 +188,58 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       } else if (artifact.type === 'outreach') {
         artifacts.outreach = artifact.data as OutreachArtifact;
         console.log('[Store] Loaded outreach artifact');
+      } else if (artifact.type === 'first_week_plan') {
+        artifacts.firstWeekPlan = artifact.data as FirstWeekPlanArtifact;
+        console.log('[Store] Loaded first week plan artifact');
       }
     });
 
     console.log('[Store] Final artifacts:', artifacts);
 
+    // Deduplicate messages by ID - server is source of truth
+    const messageMap = new Map();
+
+    // Only use database messages, don't merge with local state
+    // This prevents stale optimistic messages from persisting after reload
+    messages.forEach(msg => messageMap.set(msg.id, msg));
+
+    const deduplicatedMessages = Array.from(messageMap.values())
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
     // Determine if generation has started (any artifacts exist or messages beyond initial)
     const hasAnyArtifacts = rawArtifacts.length > 0;
-    const hasUserMessages = messages.some(m => m.role === 'user');
+    const hasUserMessages = deduplicatedMessages.some(m => m.role === 'user');
+
+    // Determine canvas state based on loaded data
+    const canvasState: CanvasState = hasAnyArtifacts
+      ? { type: 'overview' }
+      : { type: 'empty' };
 
     set({
       project,
-      messages,
+      messages: deduplicatedMessages,
       artifacts,
       selectedModelId: project.model_id || 'deepseek/deepseek-r1',
       isLoading: false,
       error: null,
       hasStartedGeneration: hasAnyArtifacts || hasUserMessages,
+      canvasState,
+      toolStatuses: new Map<string, ToolStatus>(), // Reset tool statuses
     });
   },
 
   addMessage: (message) => {
-    set((state) => ({
-      messages: [...state.messages, message],
-    }));
+    set((state) => {
+      // Prevent duplicate messages by ID
+      const exists = state.messages.some(m => m.id === message.id);
+      if (exists) {
+        console.warn('[Store] Duplicate message blocked:', message.id);
+        return state; // No change
+      }
+      return {
+        messages: [...state.messages, message],
+      };
+    });
   },
 
   updateMessage: (messageId, content) => {
@@ -178,6 +263,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.error('[Store] Cannot update: artifact.data is null/undefined');
       return;
     }
+
+    const oldArtifacts = get().artifacts;
 
     set((state) => {
       const newArtifacts = { ...state.artifacts };
@@ -210,6 +297,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       } else if (type === 'outreach') {
         console.log('[Store] Updating outreach artifact');
         newArtifacts.outreach = artifact.data as OutreachArtifact;
+      } else if (type === 'first_week_plan') {
+        console.log('[Store] Updating first week plan artifact');
+        newArtifacts.firstWeekPlan = artifact.data as FirstWeekPlanArtifact;
       } else {
         console.error('[Store] Unknown artifact type:', type);
         return state; // Don't update state for unknown types
@@ -218,6 +308,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.log('[Store] New artifacts state:', newArtifacts);
       return { artifacts: newArtifacts };
     });
+
   },
 
   setSelectedModelId: (modelId) => set({ selectedModelId: modelId }),
@@ -260,6 +351,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         businessPlan: null,
         leads: null,
         outreach: null,
+        firstWeekPlan: null,
       },
       selectedModelId: 'anthropic/claude-3.5-sonnet',
       isLoading: false,
@@ -269,6 +361,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       hasStartedGeneration: false,
       contextView: 'overview' as ContextView,
       workspaceView: 'HOME' as WorkspaceView,
+      canvasState: { type: 'empty' } as CanvasState,
+      toolStatuses: new Map<string, ToolStatus>(),
     });
   },
 
@@ -281,50 +375,53 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const state = get();
     const projectId = state.project?.id;
 
-    if (!state.artifacts.leads) {
-      console.error('[Store] No leads artifact to update');
-      return;
+    // Get previous status for activity log (if lead exists in artifacts)
+    let previousStatus: Lead['status'] | undefined;
+
+    // Optimistic update if lead exists in artifacts
+    if (state.artifacts.leads) {
+      const lead = state.artifacts.leads.leads.find(l => l.id === leadId);
+      previousStatus = lead?.status;
+
+      set((state) => ({
+        artifacts: {
+          ...state.artifacts,
+          leads: state.artifacts.leads ? {
+            ...state.artifacts.leads,
+            leads: state.artifacts.leads.leads.map(l =>
+              l.id === leadId ? { ...l, status } : l
+            )
+          } : null
+        }
+      }));
     }
 
-    // Find the lead and get previous status for activity log
-    const lead = state.artifacts.leads.leads.find(l => l.id === leadId);
-    const previousStatus = lead?.status;
-
-    // Optimistic update
-    set((state) => ({
-      artifacts: {
-        ...state.artifacts,
-        leads: state.artifacts.leads ? {
-          ...state.artifacts.leads,
-          leads: state.artifacts.leads.leads.map(l =>
-            l.id === leadId ? { ...l, status } : l
-          )
-        } : null
-      }
-    }));
-
-    // Persist to API if we have a project
+    // ALWAYS persist to API - it handles both artifacts AND dedicated leads table
     if (projectId) {
       try {
-        await fetch('/api/leads/status', {
+        const response = await fetch('/api/leads/status', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ projectId, leadId, status })
         });
 
-        // Log status change activity
-        if (previousStatus && previousStatus !== status) {
-          await get().addLeadActivity({
-            leadId,
-            type: 'status_changed',
-            content: `Status changed from ${previousStatus} to ${status}`,
-            metadata: { previousStatus, newStatus: status }
-          });
+        if (!response.ok) {
+          console.error('[Store] Failed to update lead status:', response.status);
+          return;
         }
+
+        // Log status change activity
+        await get().addLeadActivity({
+          leadId,
+          type: 'status_changed',
+          content: `Status changed to ${status}`,
+          metadata: { previousStatus, newStatus: status }
+        });
       } catch (error) {
         console.error('[Store] Failed to persist lead status:', error);
-        // Optionally revert optimistic update here
       }
+    } else {
+      console.error('[Store] No project ID to update lead status');
     }
   },
 
@@ -362,4 +459,148 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
     }
   },
+
+  // First Week Plan actions
+  updateTaskCompletion: async (taskId, completed) => {
+    const state = get();
+    const projectId = state.project?.id;
+
+    if (!state.artifacts.firstWeekPlan) {
+      console.error('[Store] No first week plan artifact to update');
+      return;
+    }
+
+    // Optimistic update
+    set((state) => ({
+      artifacts: {
+        ...state.artifacts,
+        firstWeekPlan: state.artifacts.firstWeekPlan ? {
+          ...state.artifacts.firstWeekPlan,
+          taskCompletion: {
+            ...(state.artifacts.firstWeekPlan.taskCompletion || {}),
+            [taskId]: completed,
+          },
+        } : null
+      }
+    }));
+
+    // Persist to API if we have a project
+    if (projectId) {
+      try {
+        await fetch('/api/artifacts/update-task-completion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId, taskId, completed })
+        });
+      } catch (error) {
+        console.error('[Store] Failed to persist task completion:', error);
+        // Optionally revert optimistic update here
+      }
+    }
+  },
+
+  // Canvas state actions
+  setCanvasState: (state) => {
+    console.log('[Store] setCanvasState:', state);
+    set({ canvasState: state });
+  },
+
+  startTool: (toolName) => {
+    console.log('[Store] startTool:', toolName);
+    set((state) => {
+      const newToolStatuses = new Map(state.toolStatuses);
+      newToolStatuses.set(toolName, {
+        name: toolName,
+        displayName: TOOL_DISPLAY_NAMES[toolName] || toolName,
+        status: 'running',
+        startedAt: Date.now(),
+      });
+      return { toolStatuses: newToolStatuses };
+    });
+  },
+
+  updateToolStage: (toolName, stageMessage) => {
+    set((state) => {
+      const newToolStatuses = new Map(state.toolStatuses);
+      const tool = newToolStatuses.get(toolName);
+      if (tool) {
+        newToolStatuses.set(toolName, {
+          ...tool,
+          currentStage: stageMessage,
+        });
+      }
+      return { toolStatuses: newToolStatuses };
+    });
+  },
+
+  completeTool: (toolName, duration) => {
+    console.log('[Store] completeTool:', toolName, duration);
+    set((state) => {
+      const newToolStatuses = new Map(state.toolStatuses);
+      const tool = newToolStatuses.get(toolName);
+      if (tool) {
+        newToolStatuses.set(toolName, {
+          ...tool,
+          status: 'complete',
+          completedAt: Date.now(),
+          duration,
+        });
+      }
+      return { toolStatuses: newToolStatuses };
+    });
+  },
+
+  resetTools: () => {
+    console.log('[Store] resetTools');
+    set({ toolStatuses: new Map<string, ToolStatus>() });
+  },
+
+  failTool: (toolName, errorMessage) => {
+    console.log('[Store] failTool:', toolName, errorMessage);
+    set((state) => {
+      const newToolStatuses = new Map(state.toolStatuses);
+      const tool = newToolStatuses.get(toolName);
+      if (tool) {
+        newToolStatuses.set(toolName, {
+          ...tool,
+          status: 'error',
+          completedAt: Date.now(),
+        });
+      }
+      return { toolStatuses: newToolStatuses };
+    });
+  },
+
+  refreshArtifact: async (type) => {
+    const { project, updateArtifact } = get();
+    if (!project) {
+      console.log('[Store] refreshArtifact: No project, skipping');
+      return;
+    }
+
+    console.log('[Store] refreshArtifact: Fetching', type, 'for project', project.id);
+
+    try {
+      const response = await fetch(`/api/artifacts/get?projectId=${project.id}&type=${type}`);
+      if (!response.ok) {
+        console.error('[Store] refreshArtifact: Failed to fetch', response.status);
+        return;
+      }
+
+      const { artifact } = await response.json();
+      if (artifact) {
+        console.log('[Store] refreshArtifact: Got artifact for type:', type);
+        console.log('[Store] refreshArtifact: Artifact data preview:', JSON.stringify(artifact).substring(0, 200));
+        if (type === 'leads' && artifact.data?.leads) {
+          console.log('[Store] refreshArtifact: Found', artifact.data.leads.length, 'leads in artifact');
+        }
+        updateArtifact(type, artifact);
+      } else {
+        console.log('[Store] refreshArtifact: No artifact found for type:', type);
+      }
+    } catch (error) {
+      console.error('[Store] refreshArtifact: Error', error);
+    }
+  },
+
 }));

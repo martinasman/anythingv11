@@ -2,31 +2,48 @@
 
 import { useProjectStore } from '@/store/projectStore';
 import { useState, useEffect } from 'react';
-import { useTheme } from 'next-themes';
-import Image from 'next/image';
-import OverviewLayout from './OverviewLayout';
+import PreviewPanel from './PreviewPanel';
 import BrandView from './BrandView';
 import WebsiteFocusView from './WebsiteFocusView';
 import CRMFocusView from './CRMFocusView';
-import FinanceView from './FinanceView';
+import BusinessPlanView from './BusinessPlanView';
+import FirstWeekPlanView from './FirstWeekPlanView';
 import OnboardingWalkthrough from './OnboardingWalkthrough';
+import LoadingCanvas from './LoadingCanvas';
+import OverviewCanvas from './OverviewCanvas';
+import LeadDetailWorkspace from './LeadDetailWorkspace';
+
+// Empty state component
+function EmptyStatePrompt() {
+  return (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-center max-w-md px-6">
+        <div className="mb-6 text-zinc-400 dark:text-zinc-600">
+          {/* Wireframe hint SVG */}
+          <svg className="w-48 h-48 mx-auto" viewBox="0 0 200 200" fill="none">
+            <rect x="20" y="20" width="160" height="160" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" rx="8" />
+            <rect x="40" y="40" width="120" height="40" fill="currentColor" opacity="0.1" rx="4" />
+            <rect x="40" y="90" width="120" height="70" fill="currentColor" opacity="0.05" rx="4" />
+          </svg>
+        </div>
+        <p className="text-sm text-zinc-500">
+          Describe your business idea to get started
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function ContextPanel() {
   const {
+    canvasState,
     artifacts,
     hasStartedGeneration,
-    workspaceView,
     hasSeenOnboarding,
     setHasSeenOnboarding,
   } = useProjectStore();
 
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Determine if all key artifacts are ready for onboarding
   const hasIdentity = !!artifacts.identity;
@@ -35,57 +52,72 @@ export default function ContextPanel() {
 
   // Show onboarding after first generation completes (when key artifacts are ready)
   useEffect(() => {
-    if (hasStartedGeneration && !hasSeenOnboarding && allKeyArtifactsReady) {
+    if (hasStartedGeneration && !hasSeenOnboarding && allKeyArtifactsReady && canvasState.type === 'overview') {
       setShowOnboarding(true);
     }
-  }, [hasStartedGeneration, hasSeenOnboarding, allKeyArtifactsReady]);
+  }, [hasStartedGeneration, hasSeenOnboarding, allKeyArtifactsReady, canvasState.type]);
 
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
     setHasSeenOnboarding(true);
   };
 
-  // Idle state - before generation starts
-  if (!hasStartedGeneration) {
-    return (
-      <div className="h-full w-full overflow-hidden flex flex-col" style={{ background: 'var(--surface-1)' }}>
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center max-w-sm">
-            <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-              {mounted ? (
-                <Image
-                  src={resolvedTheme === 'dark' ? '/logolight.png' : '/logodark.png'}
-                  alt="Anything"
-                  width={64}
-                  height={64}
-                  className="opacity-30"
-                />
-              ) : (
-                <div className="w-16 h-16" />
-              )}
-            </div>
-            <h3 className="text-lg font-medium text-zinc-600 dark:text-zinc-400 mb-2">
-              Ready to build
-            </h3>
-            <p className="text-sm text-zinc-400 dark:text-zinc-500">
-              Send a message to start generating your business assets
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Render content based on canvas state
+  const renderContent = () => {
+    // Empty state - no business yet AND no generation started
+    if (!hasStartedGeneration && canvasState.type === 'empty') {
+      return <EmptyStatePrompt />;
+    }
+
+    // Loading state - show when:
+    // 1. Canvas state is explicitly 'loading' (tools running)
+    // 2. Generation started but canvas still empty (waiting for first tool marker)
+    if (canvasState.type === 'loading' || (hasStartedGeneration && canvasState.type === 'empty')) {
+      return <LoadingCanvas />;
+    }
+
+    // Overview state - show website preview if available, otherwise show cards
+    if (canvasState.type === 'overview') {
+      // If website exists, show it as the main preview
+      if (artifacts.website?.files?.length) {
+        return <WebsiteFocusView />;
+      }
+      // Otherwise show the overview cards
+      return <OverviewCanvas />;
+    }
+
+    // Detail state - show specific view
+    if (canvasState.type === 'detail') {
+      switch (canvasState.view) {
+        case 'website':
+          return <WebsiteFocusView />;
+        case 'brand':
+          return <BrandView />;
+        case 'offer':
+          return <BusinessPlanView />;
+        case 'plan':
+          return <FirstWeekPlanView />;
+        case 'leads':
+          return <CRMFocusView />;
+        default:
+          return <OverviewCanvas />;
+      }
+    }
+
+    // Lead detail workspace - individual lead view with chat
+    if (canvasState.type === 'lead-detail') {
+      return <LeadDetailWorkspace leadId={canvasState.leadId} />;
+    }
+
+    // Fallback to overview
+    return <OverviewCanvas />;
+  };
 
   return (
-    <div className="h-full w-full overflow-hidden flex flex-col" style={{ background: 'var(--surface-1)' }}>
-      {/* Active View - Full height now that Dock is in Toolbar */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {workspaceView === 'HOME' && <OverviewLayout />}
-        {workspaceView === 'BRAND' && <BrandView />}
-        {workspaceView === 'CRM' && <CRMFocusView />}
-        {workspaceView === 'SITE' && <WebsiteFocusView />}
-        {workspaceView === 'FINANCE' && <FinanceView />}
-      </div>
+    <div className="h-full overflow-hidden">
+      <PreviewPanel>
+        {renderContent()}
+      </PreviewPanel>
 
       {/* Onboarding Modal */}
       {showOnboarding && <OnboardingWalkthrough onComplete={handleOnboardingComplete} />}

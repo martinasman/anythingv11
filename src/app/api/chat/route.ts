@@ -1,85 +1,36 @@
-import { streamText, stepCountIs } from 'ai';
+import { streamText, stepCountIs, tool } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createClient } from '@/utils/supabase/server';
+import type { ArtifactType } from '@/types/database';
 import { performMarketResearch, researchSchema } from '../tools/tool-research';
 import { generateBrandIdentity, designSchema } from '../tools/tool-design';
 import { generateWebsiteFiles, codeGenSchema } from '../tools/tool-code';
 import { generateBusinessPlan, businessPlanSchema } from '../tools/tool-businessplan';
 import { generateLeads, leadsSchema } from '../tools/tool-leads';
 import { generateOutreachScripts, outreachSchema } from '../tools/tool-outreach';
+import { generateFirstWeekPlan, firstWeekPlanSchema } from '../tools/tool-first-week-plan';
 // Edit tools for modifying existing artifacts
 import { editWebsiteFiles, editWebsiteSchema } from '../tools/tool-edit-website';
 import { editBrandIdentity, editIdentitySchema } from '../tools/tool-edit-identity';
 import { editPricing, editPricingSchema } from '../tools/tool-edit-pricing';
+// AI system prompt
+import { ORCHESTRATOR_SYSTEM_PROMPT } from '@/config/agentPrompts';
 
 // ============================================
-// TOOL PROGRESS CONFIGURATION
+// TOOL DISPLAY NAMES (simplified)
 // ============================================
 
-interface ToolProgress {
-  name: string;
-  steps: string[];
-  startMessage: string;
-  completeMessage: string;
-}
-
-const TOOL_CONFIG: Record<string, ToolProgress> = {
-  // Generation tools
-  perform_market_research: {
-    name: 'Market Research',
-    steps: ['Searching for competitors', 'Analyzing pricing strategies', 'Identifying market gaps'],
-    startMessage: '🔍 Researching your market...',
-    completeMessage: '✅ Market research complete!',
-  },
-  generate_brand_identity: {
-    name: 'Brand Identity',
-    steps: ['Generating business name', 'Creating logo design', 'Selecting color palette'],
-    startMessage: '✨ Creating your brand identity...',
-    completeMessage: '✅ Brand identity ready!',
-  },
-  generate_business_plan: {
-    name: 'Business Plan',
-    steps: ['Defining pricing tiers', 'Creating service packages', 'Building revenue model'],
-    startMessage: '📋 Creating your business plan...',
-    completeMessage: '✅ Business plan ready!',
-  },
-  generate_website_files: {
-    name: 'Website',
-    steps: ['Designing layout structure', 'Writing HTML & CSS', 'Adding interactive elements'],
-    startMessage: '🌐 Building your website...',
-    completeMessage: '✅ Website ready!',
-  },
-  generate_leads: {
-    name: 'Lead Generation',
-    steps: ['Searching target market', 'Qualifying prospects', 'Extracting contact info'],
-    startMessage: '🎯 Finding leads...',
-    completeMessage: '✅ Leads generated!',
-  },
-  generate_outreach_scripts: {
-    name: 'Outreach Scripts',
-    steps: ['Analyzing lead profiles', 'Writing call scripts', 'Creating email templates'],
-    startMessage: '📧 Creating outreach scripts...',
-    completeMessage: '✅ Scripts ready!',
-  },
-  // Edit tools
-  edit_website: {
-    name: 'Updating Website',
-    steps: ['Reading current code', 'Applying changes', 'Saving updates'],
-    startMessage: '🌐 Updating your website...',
-    completeMessage: '✅ Website updated!',
-  },
-  edit_identity: {
-    name: 'Updating Brand',
-    steps: ['Reading current identity', 'Applying changes', 'Saving updates'],
-    startMessage: '✨ Updating your brand...',
-    completeMessage: '✅ Brand updated!',
-  },
-  edit_pricing: {
-    name: 'Updating Pricing',
-    steps: ['Reading current plan', 'Applying changes', 'Saving updates'],
-    startMessage: '💰 Updating your pricing...',
-    completeMessage: '✅ Pricing updated!',
-  },
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  perform_market_research: 'Researching your market',
+  generate_brand_identity: 'Creating your brand',
+  generate_business_plan: 'Setting up your offer',
+  generate_website_files: 'Building your website',
+  generate_first_week_plan: 'Planning your first week',
+  generate_leads: 'Finding prospects',
+  generate_outreach_scripts: 'Writing outreach scripts',
+  edit_website: 'Updating website',
+  edit_identity: 'Updating brand',
+  edit_pricing: 'Updating pricing',
 };
 
 // ============================================
@@ -88,7 +39,7 @@ const TOOL_CONFIG: Record<string, ToolProgress> = {
 
 export async function POST(req: Request) {
   try {
-    const { messages, projectId, modelId } = await req.json();
+    const { messages, projectId, modelId, assistantMessageId } = await req.json();
 
     if (!projectId) {
       return new Response('Project ID is required', { status: 400 });
@@ -117,6 +68,7 @@ export async function POST(req: Request) {
     const userMessage = messages[messages.length - 1];
     if (userMessage.role === 'user') {
       const { error: userMsgError } = await (supabase.from('messages') as any).insert({
+        id: userMessage.id, // Pass client-generated ID for deduplication
         project_id: projectId,
         role: 'user',
         content: userMessage.content,
@@ -124,148 +76,133 @@ export async function POST(req: Request) {
       if (userMsgError) console.error('[DB] User message save failed:', userMsgError);
     }
 
-    // System prompt for business builder
-    const SYSTEM_PROMPT = `You are an AI that builds complete, ready-to-launch businesses. You have these tools available:
+    // Always use orchestrator (no phase system)
+    const SYSTEM_PROMPT = ORCHESTRATOR_SYSTEM_PROMPT;
 
-=== GENERATION TOOLS (for creating NEW artifacts) ===
-- perform_market_research: Research competitors, pricing, and market opportunities
-- generate_brand_identity: Create business name, logo, colors, and branding
-- generate_business_plan: Create pricing tiers, service packages, and revenue model
-- generate_website_files: Build a complete website using brand identity
-- generate_leads: Find potential customers (only when user asks)
-- generate_outreach_scripts: Create personalized scripts (only when user asks)
-
-=== EDIT TOOLS (for MODIFYING existing artifacts) ===
-- edit_website: Modify existing website (change colors, text, layout, sections)
-- edit_identity: Modify existing brand (rename, change colors, update tagline)
-- edit_pricing: Modify existing pricing (add tiers, change prices, update packages)
-
-=== CRITICAL RULES FOR CHOOSING TOOLS ===
-
-1. FIRST MESSAGE (no artifacts exist): Use GENERATE tools
-   - Run perform_market_research, generate_brand_identity, generate_business_plan in PARALLEL
-   - Then run generate_website_files with the brand identity
-
-2. SUBSEQUENT MESSAGES (artifacts already exist): Use EDIT tools
-   - "Change the button to blue" → edit_website
-   - "Make the hero section taller" → edit_website
-   - "Rename the business to X" → edit_identity
-   - "Change primary color to red" → edit_identity
-   - "Add a premium tier at $299" → edit_pricing
-   - "Change starter price to $99" → edit_pricing
-
-3. REGENERATE only when user explicitly says "regenerate", "start over", or "create new"
-
-=== EDIT TOOL PARAMETERS ===
-- edit_website: { editInstructions: "what to change" }
-- edit_identity: { editInstructions: "what to change" }
-- edit_pricing: { editInstructions: "what to change" }
-
-=== GENERATE TOOL PARAMETERS ===
-- generate_website_files: { businessDescription, identity: { name, colors, font, tagline, logoUrl } }
-- generate_business_plan: { businessType, targetMarket, competitors, brandName }
-- generate_leads: { businessType, targetIndustries, targetLocation, numberOfLeads }
-- generate_outreach_scripts: { businessType, brandName, leads }
-
-=== USER-TRIGGERED TOOLS ===
-- generate_leads: ONLY when user explicitly asks to generate leads
-- generate_outreach_scripts: ONLY when user explicitly asks for scripts AND leads exist
-
-=== FIRST MESSAGE SUMMARY ===
-After initial generation, provide:
-"🎉 Your business foundation is ready!
-
-**[Business Name]** - [One-line description]
-
-• Market Research: Found [X] competitors
-• Brand Identity: Custom logo + color palette
-• Business Plan: [X] pricing tiers
-• Website: Modern landing page ready
-
-You can now ask me to make specific changes like:
-→ 'Change the button color to blue'
-→ 'Rename the business to TechFlow'
-→ 'Add a premium tier at $499'"
-
-=== EDIT CONFIRMATION ===
-After editing, briefly confirm what was changed. The system will automatically show status messages.`;
+    console.log('[Chat API] System prompt loaded');
 
 
     // Tool definitions
     const tools = {
-      perform_market_research: {
+      perform_market_research: tool({
         description:
           'Perform comprehensive market research to identify competitors, pricing strategies, and market opportunities for a business idea',
         inputSchema: researchSchema,
-        execute: async (params: any) => {
+        execute: async (params) => {
           return await performMarketResearch({ ...params, projectId });
         },
-      },
-      generate_brand_identity: {
+      }),
+      generate_brand_identity: tool({
         description:
           'Generate a complete brand identity including logo, color palette, typography, and tagline',
         inputSchema: designSchema,
-        execute: async (params: any) => {
+        execute: async (params) => {
           return await generateBrandIdentity({ ...params, projectId });
         },
-      },
-      generate_business_plan: {
+      }),
+      generate_business_plan: tool({
         description:
           'Generate a complete business plan with pricing tiers, service packages, revenue model, and value proposition',
         inputSchema: businessPlanSchema,
-        execute: async (params: any) => {
+        execute: async (params) => {
           return await generateBusinessPlan({ ...params, projectId });
         },
-      },
-      generate_website_files: {
+      }),
+      generate_website_files: tool({
         description:
           'Generate a complete, responsive website with HTML, CSS, and JavaScript files based on the business description and brand identity',
         inputSchema: codeGenSchema,
-        execute: async (params: any) => {
+        execute: async (params) => {
           return await generateWebsiteFiles({ ...params, projectId, modelId: selectedModel });
         },
-      },
-      generate_leads: {
+      }),
+      generate_leads: tool({
         description:
           'Generate a list of qualified potential customers/leads by searching the web for companies that match the ideal customer profile',
         inputSchema: leadsSchema,
-        execute: async (params: any) => {
-          return await generateLeads({ ...params, projectId });
+        execute: async (params) => {
+          console.log('[Route] generate_leads called with:', JSON.stringify(params));
+          try {
+            return await generateLeads({ ...params, projectId });
+          } catch (err) {
+            console.error('[Route] generate_leads error:', err);
+            return { success: false, error: String(err) };
+          }
         },
-      },
-      generate_outreach_scripts: {
+      }),
+      generate_outreach_scripts: tool({
         description:
           'Generate personalized cold call scripts and email sequences for each lead, tailored to their industry and pain points',
         inputSchema: outreachSchema,
-        execute: async (params: any) => {
+        execute: async (params) => {
           return await generateOutreachScripts({ ...params, projectId });
         },
-      },
-      // Edit tools for modifying existing artifacts
-      edit_website: {
+      }),
+      generate_first_week_plan: tool({
         description:
-          'Edit an existing website - use this to make changes like updating colors, text, layout, or sections. Do NOT use generate_website_files for edits.',
-        inputSchema: editWebsiteSchema,
-        execute: async (params: any) => {
-          return await editWebsiteFiles({ ...params, projectId });
+          'Generate a day-by-day action plan to make money in the first week. Creates specific tasks, outreach scripts, and success metrics for landing the first client.',
+        inputSchema: firstWeekPlanSchema,
+        execute: async (params) => {
+          return await generateFirstWeekPlan({ ...params, projectId });
         },
-      },
-      edit_identity: {
+      }),
+      // Edit tools for modifying existing artifacts
+      edit_website: tool({
+        description:
+          'Edit an existing website - use this to make changes like updating colors, text, layout, or sections. DO NOT use generate_website_files for edits.',
+        inputSchema: editWebsiteSchema,
+        execute: async (params) => {
+          return await editWebsiteFiles({
+            ...params,
+            projectId,
+            onProgress: async (update) => {
+              if (update.type === 'stage') {
+                // Emit progress stage marker
+                const marker = `[PROGRESS:${update.stage}:${update.message}]\n`;
+                await writeProgress(marker);
+              } else if (update.type === 'change') {
+                // Emit code change marker
+                const marker = `[CODE_CHANGE:${update.file}:${update.description}${update.before && update.after ? `|${update.before}|${update.after}` : ''}]\n`;
+                await writeProgress(marker);
+              }
+            }
+          });
+        },
+      }),
+      edit_identity: tool({
         description:
           'Edit the existing brand identity - use this to change the business name, colors, tagline, or regenerate the logo. Do NOT use generate_brand_identity for edits.',
         inputSchema: editIdentitySchema,
-        execute: async (params: any) => {
-          return await editBrandIdentity({ ...params, projectId });
+        execute: async (params) => {
+          return await editBrandIdentity({
+            ...params,
+            projectId,
+            onProgress: async (update) => {
+              if (update.type === 'stage') {
+                const marker = `[PROGRESS:${update.stage}:${update.message}]\n`;
+                await writeProgress(marker);
+              }
+            }
+          });
         },
-      },
-      edit_pricing: {
+      }),
+      edit_pricing: tool({
         description:
           'Edit the existing pricing and business plan - use this to add/remove tiers, change prices, or update service packages. Do NOT use generate_business_plan for edits.',
         inputSchema: editPricingSchema,
-        execute: async (params: any) => {
-          return await editPricing({ ...params, projectId });
+        execute: async (params) => {
+          return await editPricing({
+            ...params,
+            projectId,
+            onProgress: async (update) => {
+              if (update.type === 'stage') {
+                const marker = `[PROGRESS:${update.stage}:${update.message}]\n`;
+                await writeProgress(marker);
+              }
+            }
+          });
         },
-      },
+      }),
     };
 
     // Create a custom readable stream for progress updates
@@ -294,49 +231,50 @@ After editing, briefly confirm what was changed. The system will automatically s
       tools,
 
       // Stream progress updates for tool executions
-      onStepFinish: async ({ toolCalls, toolResults, text }) => {
+      onStepFinish: async ({ toolCalls, toolResults }) => {
         console.log('[Chat API] Step finished with', toolCalls?.length || 0, 'tool calls');
 
-        // Write tool start messages with detailed steps
+        // Emit start markers for new tools
         if (toolCalls && toolCalls.length > 0) {
           for (const call of toolCalls) {
             if (!activeTools.has(call.toolName)) {
               activeTools.add(call.toolName);
               toolStartTimes[call.toolName] = Date.now();
-              const config = TOOL_CONFIG[call.toolName];
-              if (config) {
-                // Stream human-readable narration text (displayed in chat)
-                await writeProgress(`${config.startMessage}\n\n`);
-                // Stream structured progress marker for UI
-                await writeProgress(`[PROGRESS:${call.toolName}:start:${config.name}]\n`);
-                // Stream steps as they "happen"
-                for (let i = 0; i < config.steps.length; i++) {
-                  await writeProgress(`[STEP:${call.toolName}:${i}:${config.steps[i]}]\n`);
-                }
-              }
+              const displayName = TOOL_DISPLAY_NAMES[call.toolName] || call.toolName;
+              // Emit simplified [WORK:tool:description] marker
+              await writeProgress(`[WORK:${call.toolName}:${displayName}]\n`);
               console.log(`[Chat API] 🔧 Executing: ${call.toolName}`);
             }
           }
         }
 
-        // Write tool completion messages
+        // Emit completion markers with duration
         if (toolResults && toolResults.length > 0) {
           for (const toolResult of toolResults) {
             if (!completedTools.has(toolResult.toolName)) {
               completedTools.add(toolResult.toolName);
-              const config = TOOL_CONFIG[toolResult.toolName];
-              const duration = toolStartTimes[toolResult.toolName]
-                ? Math.round((Date.now() - toolStartTimes[toolResult.toolName]) / 1000)
+              const rawDuration = toolStartTimes[toolResult.toolName]
+                ? (Date.now() - toolStartTimes[toolResult.toolName]) / 1000
                 : 0;
+              // Show minimum 0.5s for very fast tools to feel more responsive
+              const displayDuration = rawDuration < 0.5 ? '' : rawDuration.toFixed(1);
+              const duration = displayDuration;
 
-              if (config) {
-                // Stream human-readable completion narration (displayed in chat)
-                await writeProgress(`\n${config.completeMessage}\n\n`);
-                // Stream completion marker with duration
-                await writeProgress(`[PROGRESS:${toolResult.toolName}:complete:${config.name}:${duration}s]\n`);
+              // Check if the tool result indicates failure
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const result = (toolResult as any).result as { success?: boolean; error?: string } | undefined;
+              if (result && result.success === false) {
+                // Emit error marker for failed tools
+                const errorMessage = result.error || 'Unknown error';
+                await writeProgress(`[WORK_ERROR:${toolResult.toolName}:${errorMessage}]\n`);
+                console.log(`[Chat API] ❌ Failed: ${toolResult.toolName} - ${errorMessage}`);
+              } else {
+                // Emit simplified [WORK_DONE:tool:duration] marker
+                // Only show duration if it was significant (>0.5s)
+                const durationDisplay = duration ? `${duration}s` : '';
+                await writeProgress(`[WORK_DONE:${toolResult.toolName}:${durationDisplay}]\n`);
+                console.log(`[Chat API] ✅ Completed: ${toolResult.toolName}${duration ? ` (${duration}s)` : ''}`);
               }
-
-              console.log(`[Chat API] ✅ Completed: ${toolResult.toolName} (${duration}s)`);
             }
           }
         }
@@ -350,12 +288,6 @@ After editing, briefly confirm what was changed. The system will automatically s
         // Generate content from text or tool calls
         let content = text || '';
 
-        // If no AI text but tools were called, generate a summary
-        if (!content && completedTools.size > 0) {
-          content = '\n\n🎉 Your business is ready! Check out the panels on the right to see your:\n• Market Research\n• Brand Identity & Logo\n• Website Preview\n\nAsk me to refine anything!';
-          await writeProgress(content);
-        }
-
         // Save to database
         const finalContent = content ||
           (toolCalls && toolCalls.length > 0
@@ -364,6 +296,7 @@ After editing, briefly confirm what was changed. The system will automatically s
 
         if (finalContent) {
           const { error: assistantMsgError } = await (supabase.from('messages') as any).insert({
+            id: assistantMessageId, // Use client-generated ID for deduplication
             project_id: projectId,
             role: 'assistant',
             content: finalContent,

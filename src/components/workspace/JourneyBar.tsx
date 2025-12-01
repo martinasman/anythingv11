@@ -77,7 +77,7 @@ export default function JourneyBar({
               {currentStep === 1 && !hasLeads && (
                 <button
                   onClick={onGenerateLeads}
-                  className="w-full py-2.5 px-4 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 btn-primary text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
                   <Target size={16} />
                   Generate 10 Leads
@@ -133,7 +133,7 @@ export default function JourneyBar({
               {currentStep === 2 && !hasScripts && (
                 <button
                   onClick={onCreateScripts}
-                  className="w-full py-2.5 px-4 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 btn-primary text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
                   <MessageSquare size={16} />
                   Create Scripts

@@ -7,11 +7,7 @@ import { useTheme } from 'next-themes';
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
-const navLinks = [
-  { label: 'Features', href: '#features' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'FAQ', href: '#faq' },
-];
+const navLinks: Array<{ label: string; href: string }> = [];
 
 export default function Header() {
   const { theme, resolvedTheme, setTheme } = useTheme();
@@ -49,8 +45,8 @@ export default function Header() {
 
   const headerClasses = `fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
     scrolled
-      ? 'py-3 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-zinc-200/50 dark:border-slate-800/50'
-      : 'py-4 bg-transparent'
+      ? 'py-2 bg-white/80 dark:bg-neutral-950/80 backdrop-blur-xl border-b border-zinc-200/50 dark:border-neutral-800/50'
+      : 'py-3 bg-transparent'
   }`;
 
   // Hydration-safe render
@@ -101,7 +97,7 @@ export default function Header() {
             {/* Theme toggle */}
             <button
               onClick={toggleTheme}
-              className="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+              className="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-800 transition-colors"
               aria-label="Toggle theme"
             >
               {resolvedTheme === 'dark' ? (
@@ -114,12 +110,12 @@ export default function Header() {
             {/* Auth buttons (desktop) */}
             <div className="hidden md:flex items-center gap-3">
               {authLoading ? (
-                <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-slate-700 animate-pulse" />
+                <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-neutral-700 animate-pulse" />
               ) : user ? (
                 <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    className="flex items-center gap-2 p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-slate-800 transition-colors"
+                    className="flex items-center gap-2 p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-neutral-800 transition-colors"
                   >
                     {user.user_metadata?.avatar_url ? (
                       <Image
@@ -130,7 +126,7 @@ export default function Header() {
                         className="rounded-full"
                       />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-zinc-300 dark:bg-slate-600 flex items-center justify-center text-sm font-medium text-zinc-700 dark:text-slate-300">
+                      <div className="w-8 h-8 rounded-full bg-zinc-300 dark:bg-neutral-600 flex items-center justify-center text-sm font-medium text-zinc-700 dark:text-neutral-300">
                         {user.email?.[0]?.toUpperCase() || 'U'}
                       </div>
                     )}
@@ -139,8 +135,8 @@ export default function Header() {
 
                   {/* User dropdown menu */}
                   {userMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-zinc-200 dark:border-slate-800 py-2 z-50">
-                      <div className="px-4 py-3 border-b border-zinc-100 dark:border-slate-800">
+                    <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-neutral-900 rounded-xl shadow-xl border border-zinc-200 dark:border-neutral-800 py-2 z-50">
+                      <div className="px-4 py-3 border-b border-zinc-100 dark:border-neutral-800">
                         <p className="text-sm font-medium text-zinc-900 dark:text-white truncate">
                           {user.user_metadata?.full_name || 'User'}
                         </p>
@@ -153,7 +149,7 @@ export default function Header() {
                           signOut();
                           setUserMenuOpen(false);
                         }}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-600 dark:text-slate-400 hover:bg-zinc-100 dark:hover:bg-slate-800 transition-colors"
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-600 dark:text-neutral-400 hover:bg-zinc-100 dark:hover:bg-neutral-800 transition-colors"
                       >
                         <LogOut size={16} />
                         Sign out
@@ -165,13 +161,13 @@ export default function Header() {
                 <>
                   <Link
                     href="/signin"
-                    className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-slate-400 dark:hover:text-white transition-colors"
+                    className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
                   >
                     Sign in
                   </Link>
                   <Link
                     href="/signin"
-                    className="text-sm font-medium bg-zinc-900 text-white px-4 py-2 rounded-lg hover:bg-zinc-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 transition-colors"
+                    className="text-sm font-medium bg-zinc-900 text-white px-4 py-2 rounded-lg hover:bg-zinc-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100 transition-colors"
                   >
                     Get started
                   </Link>
@@ -182,7 +178,7 @@ export default function Header() {
             {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+              className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-800 transition-colors"
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? (
@@ -199,10 +195,10 @@ export default function Header() {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div
-            className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm"
+            className="absolute inset-0 bg-neutral-900/20 backdrop-blur-sm"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="absolute top-16 left-4 right-4 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-slate-800 p-6">
+          <div className="absolute top-16 left-4 right-4 bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-neutral-800 p-6">
             <nav className="flex flex-col gap-4 mb-6">
               {navLinks.map((link) => (
                 <Link
@@ -215,7 +211,7 @@ export default function Header() {
                 </Link>
               ))}
             </nav>
-            <div className="flex flex-col gap-3 pt-4 border-t border-zinc-200 dark:border-slate-800">
+            <div className="flex flex-col gap-3 pt-4 border-t border-zinc-200 dark:border-neutral-800">
               {user ? (
                 <>
                   <div className="flex items-center gap-3 px-2 py-2">
@@ -228,7 +224,7 @@ export default function Header() {
                         className="rounded-full"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-zinc-300 dark:bg-slate-600 flex items-center justify-center text-sm font-medium text-zinc-700 dark:text-slate-300">
+                      <div className="w-10 h-10 rounded-full bg-zinc-300 dark:bg-neutral-600 flex items-center justify-center text-sm font-medium text-zinc-700 dark:text-neutral-300">
                         {user.email?.[0]?.toUpperCase() || 'U'}
                       </div>
                     )}
@@ -246,7 +242,7 @@ export default function Header() {
                       signOut();
                       setMobileMenuOpen(false);
                     }}
-                    className="flex items-center justify-center gap-2 text-sm font-medium text-zinc-600 dark:text-slate-400 py-3 hover:bg-zinc-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                    className="flex items-center justify-center gap-2 text-sm font-medium text-zinc-600 dark:text-neutral-400 py-3 hover:bg-zinc-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
                   >
                     <LogOut size={16} />
                     Sign out
@@ -257,14 +253,14 @@ export default function Header() {
                   <Link
                     href="/signin"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="text-center text-sm font-medium text-zinc-600 dark:text-slate-400 py-2"
+                    className="text-center text-sm font-medium text-zinc-600 dark:text-neutral-400 py-2"
                   >
                     Sign in
                   </Link>
                   <Link
                     href="/signin"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="text-center text-sm font-medium bg-zinc-900 text-white dark:bg-white dark:text-slate-900 px-4 py-3 rounded-lg"
+                    className="text-center text-sm font-medium bg-zinc-900 text-white dark:bg-white dark:text-neutral-900 px-4 py-3 rounded-lg"
                   >
                     Get started
                   </Link>

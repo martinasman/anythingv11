@@ -10,20 +10,20 @@ import { FolderOpen, X } from 'lucide-react';
 
 function SkeletonCard() {
   return (
-    <div className="p-4 rounded-2xl bg-white dark:bg-slate-800/50 border border-zinc-200 dark:border-slate-700/50 animate-pulse">
+    <div className="p-4 rounded-2xl bg-white dark:bg-neutral-800/50 border border-zinc-200 dark:border-neutral-700/50 animate-pulse">
       {/* 16:9 preview skeleton */}
-      <div className="aspect-video rounded-xl bg-zinc-200 dark:bg-slate-700 mb-3" />
+      <div className="aspect-video rounded-xl bg-zinc-200 dark:bg-neutral-700 mb-3" />
       <div className="space-y-2">
-        <div className="h-5 bg-zinc-200 dark:bg-slate-700 rounded w-3/4" />
-        <div className="h-3 bg-zinc-200 dark:bg-slate-700 rounded w-full" />
-        <div className="h-3 bg-zinc-200 dark:bg-slate-700 rounded w-2/3" />
+        <div className="h-5 bg-zinc-200 dark:bg-neutral-700 rounded w-3/4" />
+        <div className="h-3 bg-zinc-200 dark:bg-neutral-700 rounded w-full" />
+        <div className="h-3 bg-zinc-200 dark:bg-neutral-700 rounded w-2/3" />
         <div className="flex items-center justify-between pt-2">
-          <div className="h-3 bg-zinc-200 dark:bg-slate-700 rounded w-16" />
+          <div className="h-3 bg-zinc-200 dark:bg-neutral-700 rounded w-16" />
           {/* Action buttons skeleton */}
           <div className="flex items-center gap-1">
-            <div className="h-6 w-6 bg-zinc-200 dark:bg-slate-700 rounded" />
-            <div className="h-6 w-6 bg-zinc-200 dark:bg-slate-700 rounded" />
-            <div className="h-6 w-6 bg-zinc-200 dark:bg-slate-700 rounded" />
+            <div className="h-6 w-6 bg-zinc-200 dark:bg-neutral-700 rounded" />
+            <div className="h-6 w-6 bg-zinc-200 dark:bg-neutral-700 rounded" />
+            <div className="h-6 w-6 bg-zinc-200 dark:bg-neutral-700 rounded" />
           </div>
         </div>
       </div>
@@ -106,13 +106,13 @@ export default function ProjectDashboard() {
   if (!user) return null;
 
   return (
-    <section className="py-12 sm:py-16">
+    <section className="py-20 sm:py-28">
       <Container>
         <div className="mb-6">
           <h2 className="text-xl font-semibold text-zinc-900 dark:text-white">
             Your Projects
           </h2>
-          <p className="text-sm text-zinc-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-zinc-500 dark:text-neutral-400 mt-1">
             Continue where you left off
           </p>
         </div>
@@ -126,12 +126,12 @@ export default function ProjectDashboard() {
           </div>
         ) : projects.length === 0 ? (
           // Empty state
-          <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-zinc-200 dark:border-slate-700">
-            <FolderOpen className="w-12 h-12 mx-auto text-zinc-300 dark:text-slate-600 mb-4" strokeWidth={1} />
-            <h3 className="text-lg font-medium text-zinc-600 dark:text-slate-400 mb-1">
+          <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-zinc-200 dark:border-neutral-700">
+            <FolderOpen className="w-12 h-12 mx-auto text-zinc-300 dark:text-neutral-600 mb-4" strokeWidth={1} />
+            <h3 className="text-lg font-medium text-zinc-600 dark:text-neutral-400 mb-1">
               No projects yet
             </h3>
-            <p className="text-sm text-zinc-400 dark:text-slate-500">
+            <p className="text-sm text-zinc-400 dark:text-neutral-500">
               Create your first project using the input above
             </p>
           </div>
@@ -153,17 +153,17 @@ export default function ProjectDashboard() {
       {/* Delete Confirmation Modal */}
       {deleteModalOpen && projectToDelete && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/60 backdrop-blur-sm"
           onClick={() => !isDeleting && setDeleteModalOpen(false)}
         >
           <div
-            className="relative w-full max-w-md mx-4 p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-slate-800"
+            className="relative w-full max-w-md mx-4 p-6 bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-neutral-800"
             onClick={e => e.stopPropagation()}
           >
             {/* Close button */}
             <button
               onClick={() => !isDeleting && setDeleteModalOpen(false)}
-              className="absolute top-4 right-4 p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-slate-300 rounded transition-colors"
+              className="absolute top-4 right-4 p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-neutral-300 rounded transition-colors"
               disabled={isDeleting}
             >
               <X size={20} />
@@ -172,14 +172,14 @@ export default function ProjectDashboard() {
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-white mb-2">
               Delete Project
             </h3>
-            <p className="text-sm text-zinc-600 dark:text-slate-400 mb-6">
+            <p className="text-sm text-zinc-600 dark:text-neutral-400 mb-6">
               Are you sure you want to delete <span className="font-medium text-zinc-900 dark:text-white">{projectToDelete.name}</span>? This action cannot be undone.
             </p>
 
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setDeleteModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-zinc-600 dark:text-slate-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                className="px-4 py-2 text-sm font-medium text-zinc-600 dark:text-neutral-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
                 disabled={isDeleting}
               >
                 Cancel

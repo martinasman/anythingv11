@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Clock, Sparkles, Trash2, Copy, Share2 } from 'lucide-react';
+import { Clock, Trash2, Copy, Share2 } from 'lucide-react';
 import type { Project } from '@/types/database';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
 
@@ -14,12 +14,12 @@ interface ProjectCardProps {
 // Generate a consistent gradient based on project name
 function getGradient(name: string): string {
   const gradients = [
-    'from-blue-500 to-cyan-500',
     'from-purple-500 to-pink-500',
     'from-green-500 to-emerald-500',
     'from-orange-500 to-red-500',
     'from-indigo-500 to-purple-500',
     'from-pink-500 to-rose-500',
+    'from-amber-500 to-orange-500',
   ];
 
   // Simple hash based on name
@@ -75,11 +75,10 @@ export default function ProjectCard({ project, index, onDelete }: ProjectCardPro
   return (
     <div
       onClick={handleClick}
-      className={`group p-4 rounded-2xl bg-white dark:bg-slate-800/50 border border-zinc-200 dark:border-slate-700/50 hover-scale cursor-pointer transition-all animate-fade-in-up stagger-${Math.min(index + 1, 6)}`}
+      className={`group p-4 rounded-2xl bg-white dark:bg-neutral-800/50 border border-zinc-200 dark:border-neutral-700/50 hover-scale cursor-pointer transition-all animate-fade-in-up stagger-${Math.min(index + 1, 6)}`}
     >
       {/* 16:9 Preview */}
-      <div className={`aspect-video rounded-xl bg-gradient-to-br ${gradient} mb-3 flex items-center justify-center overflow-hidden`}>
-        <Sparkles className="w-10 h-10 text-white/80" strokeWidth={1.5} />
+      <div className={`aspect-video rounded-xl bg-gradient-to-br ${gradient} mb-3 overflow-hidden`}>
       </div>
 
       {/* Project info */}

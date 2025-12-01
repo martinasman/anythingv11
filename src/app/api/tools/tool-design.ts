@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { generateText } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import type { IdentityArtifact } from '@/types/database';
 import { ARTIST_SYSTEM_PROMPT, getIndustryColors } from '@/config/agentPrompts';
 
@@ -101,7 +101,7 @@ Think about the business type and create relevant visual metaphors. For example:
 Create a clean, professional logo with the specified colors on a transparent or white background.`;
 
     // Make direct API request to OpenRouter for image generation
-    // Using Gemini 2.5 Flash Image (original Nano Banana) - more stable response format
+    // Using Nano Banana Pro for logo generation
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -111,7 +111,7 @@ Create a clean, professional logo with the specified colors on a transparent or 
         'X-Title': 'AnythingV10',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image-preview',
+        model: 'nexa-ai/nanobanana-pro',
         messages: [
           {
             role: 'user',
@@ -349,7 +349,10 @@ export async function generateBrandIdentity(params: z.infer<typeof designSchema>
     };
 
     // Save to Supabase with UPSERT for updates
-    const supabase = await createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
     const { data: artifact, error} = await (supabase
       .from('artifacts') as any)
       .upsert(

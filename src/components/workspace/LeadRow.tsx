@@ -1,6 +1,6 @@
 'use client';
 
-import { Mail, Phone, Linkedin, ChevronDown } from 'lucide-react';
+import { Mail, Phone, Linkedin, ChevronDown, Info, Flame, CloudSun, Snowflake } from 'lucide-react';
 import type { Lead, OutreachScript } from '@/types/database';
 import { useState } from 'react';
 
@@ -14,10 +14,10 @@ interface LeadRowProps {
 
 const STATUS_OPTIONS: { value: Lead['status']; label: string; color: string }[] = [
   { value: 'new', label: 'New', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-  { value: 'contacted', label: 'Contacted', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
+  { value: 'contacted', label: 'Contacted', color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
   { value: 'responded', label: 'Responded', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-  { value: 'converted', label: 'Converted', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-  { value: 'rejected', label: 'Rejected', color: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
+  { value: 'closed', label: 'Closed', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  { value: 'lost', label: 'Lost', color: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
 ];
 
 export default function LeadRow({ lead, script, onEmail, onCall, onStatusChange }: LeadRowProps) {
@@ -46,11 +46,33 @@ export default function LeadRow({ lead, script, onEmail, onCall, onStatusChange 
           </span>
         </div>
 
-        {/* Score - col-span-2 */}
-        <div className="col-span-2">
-          <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-700 rounded">
-            {lead.score}/10
+        {/* ICP Score - col-span-2 */}
+        <div className="col-span-2 flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded ${
+            lead.icpScore >= 8
+              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+              : lead.icpScore >= 5
+              ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+          }`}>
+            {lead.icpScore >= 8 ? <Flame size={12} /> : lead.icpScore >= 5 ? <CloudSun size={12} /> : <Snowflake size={12} />}
+            {lead.icpScore}/10
           </span>
+
+          {/* Match reasons tooltip */}
+          {lead.icpMatchReasons && lead.icpMatchReasons.length > 0 && (
+            <div className="relative group">
+              <Info size={14} className="text-zinc-400 cursor-help" />
+              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 w-64 p-2 bg-zinc-900 text-white text-xs rounded-lg shadow-lg">
+                <p className="font-semibold mb-1">Why this lead matches:</p>
+                <ul className="space-y-0.5">
+                  {lead.icpMatchReasons.map((reason, i) => (
+                    <li key={i}>✓ {reason}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Status - col-span-2 */}

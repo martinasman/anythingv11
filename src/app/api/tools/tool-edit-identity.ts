@@ -1,8 +1,20 @@
 import { z } from 'zod';
 import { generateText } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import type { IdentityArtifact } from '@/types/database';
+
+// ============================================
+// TYPES
+// ============================================
+
+export interface ProgressUpdate {
+  type: 'stage' | 'change';
+  stage?: string;
+  message?: string;
+}
+
+type ProgressCallback = (update: ProgressUpdate) => Promise<void>;
 
 // ============================================
 // SCHEMA DEFINITION
@@ -44,7 +56,7 @@ Create a clean, professional logo with the specified colors on a transparent or 
         'X-Title': 'AnythingV10',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image-preview',
+        model: 'nexa-ai/nanobanana-pro',
         messages: [{ role: 'user', content: logoPrompt }],
         modalities: ['image', 'text'],
         temperature: 0.9,
@@ -97,15 +109,21 @@ Create a clean, professional logo with the specified colors on a transparent or 
 // TOOL IMPLEMENTATION
 // ============================================
 
-export async function editBrandIdentity(params: z.infer<typeof editIdentitySchema> & { projectId: string }) {
-  const { editInstructions, projectId } = params;
+export async function editBrandIdentity(params: z.infer<typeof editIdentitySchema> & { projectId: string; onProgress?: ProgressCallback }) {
+  const { editInstructions, projectId, onProgress } = params;
 
   try {
     console.log('[Edit Identity] 🎨 Starting identity edit...');
     console.log('[Edit Identity] Instructions:', editInstructions);
 
+    // Stage 1: Fetching current identity
+    await onProgress?.({ type: 'stage', stage: 'fetch', message: 'Loading your current brand...' });
+
     // 1. Fetch current identity artifact
-    const supabase = await createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
     const { data: artifact, error: fetchError } = await (supabase
       .from('artifacts') as any)
       .select('*')
@@ -120,6 +138,9 @@ export async function editBrandIdentity(params: z.infer<typeof editIdentitySchem
 
     const currentIdentity = artifact.data as IdentityArtifact;
     console.log('[Edit Identity] Current identity:', currentIdentity.name);
+
+    // Stage 2: Analyzing changes
+    await onProgress?.({ type: 'stage', stage: 'analyze', message: 'Analyzing what needs to change...' });
 
     // 2. Use AI to determine what changes to make
     const openrouter = createOpenRouter({
@@ -158,6 +179,9 @@ Set "needsNewLogo" to true ONLY if:
 - The colors changed significantly
 - User explicitly asked for a new logo`;
 
+    // Stage 3: Generating updates
+    await onProgress?.({ type: 'stage', stage: 'generate', message: 'Generating updated brand...' });
+
     const { text } = await generateText({
       model: openrouter('anthropic/claude-3.5-sonnet'),
       prompt,
@@ -185,6 +209,8 @@ Set "needsNewLogo" to true ONLY if:
     // 4. Regenerate logo if needed
     let logoUrl = currentIdentity.logoUrl;
     if (updates.needsNewLogo) {
+      // Stage 4: Regenerating logo
+      await onProgress?.({ type: 'stage', stage: 'logo', message: 'Regenerating logo...' });
       console.log('[Edit Identity] Regenerating logo due to changes...');
       logoUrl = await regenerateLogo(updates.name, updates.colors);
     }
@@ -197,6 +223,9 @@ Set "needsNewLogo" to true ONLY if:
       font: updates.font,
       logoUrl,
     };
+
+    // Stage 5: Saving
+    await onProgress?.({ type: 'stage', stage: 'save', message: 'Saving your updates...' });
 
     // 6. Save to database
     const { data: updatedArtifact, error: saveError } = await (supabase

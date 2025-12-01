@@ -3,71 +3,83 @@
 @variant dark (&:is(.dark *));
 
 :root {
-  /* Surface layers - warm tones with VISIBLE STEPS */
-  --surface-0: #F5F3EF;   /* Page background - warm stone */
-  --surface-1: #FAF8F5;   /* Panels (Chat, Context) - warm cream */
-  --surface-2: #FFFFFF;   /* Cards - pure white (stands out on cream) */
-  --surface-3: #FFFFFF;   /* Elevated elements (dropdowns) */
+  /* Surfaces - Neutral palette */
+  --surface-0: #FFFFFF;   /* white - page bg */
+  --surface-1: #FAFAFA;   /* neutral-50 - panels */
+  --surface-2: #E5E5E5;   /* neutral-200 - cards (chat input) */
+  --surface-3: #F5F5F5;   /* neutral-100 - elevated */
 
   /* Text hierarchy */
-  --text-primary: #1A1A1A;
-  --text-secondary: #525252;
-  --text-tertiary: #737373;
-  --text-muted: #A3A3A3;
+  --text-primary: #18181B;    /* zinc-900 */
+  --text-secondary: #52525B;  /* zinc-600 */
+  --text-tertiary: #71717A;   /* zinc-500 */
+  --text-muted: #A1A1AA;      /* zinc-400 */
 
-  /* Warm shadows - subtle depth without borders */
-  --shadow-sm: 0 2px 8px rgba(30, 20, 15, 0.04);
-  --shadow-md: 0 4px 16px rgba(30, 20, 15, 0.06);
-  --shadow-lg: 0 8px 32px rgba(30, 20, 15, 0.08);
-  --shadow-xl: 0 16px 48px rgba(30, 20, 15, 0.12);
+  /* Borders (replace shadows) */
+  --border-subtle: #E4E4E7;   /* zinc-200 */
+  --border-default: #D4D4D8;  /* zinc-300 */
+  --border-strong: #A1A1AA;   /* zinc-400 */
+
+  /* Accent - blue for professional tool aesthetic */
+  --accent: #3B82F6;          /* blue-500 */
+  --accent-hover: #2563EB;    /* blue-600 */
+
+  /* Legacy aliases for gradual migration */
+  --primary: var(--accent);
+  --primary-hover: var(--accent-hover);
+  --primary-active: #1D4ED8;  /* blue-700 */
 
   /* Legacy support */
   --background: var(--surface-0);
   --foreground: var(--text-primary);
 
-  /* Dock glass effect */
-  --dock-bg: rgba(255, 255, 255, 0.72);
-  --dock-border: rgba(0, 0, 0, 0.06);
-  --dock-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+  /* Dock glass effect - updated for zinc */
+  --dock-bg: rgba(255, 255, 255, 0.8);
+  --dock-border: rgba(0, 0, 0, 0.08);
   --dock-blur: blur(20px) saturate(180%);
-  --dock-tab-inactive: #6b7280;
-  --dock-tab-active: #111827;
+  --dock-tab-inactive: #71717A;  /* zinc-500 */
+  --dock-tab-active: #18181B;    /* zinc-900 */
   --dock-indicator-bg: white;
-  --dock-indicator-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .dark {
-  /* Surface layers - Zinc palette (neutral gray, no blue) */
-  --surface-0: #18181b;   /* zinc-900 - Page background */
-  --surface-1: #27272a;   /* zinc-800 - Panels */
-  --surface-2: #3f3f46;   /* zinc-700 - Cards/elevated */
-  --surface-3: #52525b;   /* zinc-600 - Hover states */
+  /* Dark mode - true neutral palette matching workspace */
+  --surface-0: #171717;   /* neutral-900 - main page bg */
+  --surface-1: #0A0A0A;   /* neutral-950 - panels */
+  --surface-2: #262626;   /* neutral-800 - cards */
+  --surface-3: #404040;   /* neutral-700 - elevated */
 
-  /* Text hierarchy - Zinc (neutral) */
-  --text-primary: #fafafa;   /* zinc-50 */
-  --text-secondary: #a1a1aa; /* zinc-400 */
-  --text-tertiary: #71717a;  /* zinc-500 */
-  --text-muted: #52525b;     /* zinc-600 */
+  /* Text hierarchy */
+  --text-primary: #FAFAFA;    /* neutral-50 */
+  --text-secondary: #A3A3A3;  /* neutral-400 */
+  --text-tertiary: #737373;   /* neutral-500 */
+  --text-muted: #525252;      /* neutral-600 */
 
-  /* Zinc-based shadows (neutral) */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.6);
+  /* Borders */
+  --border-subtle: #262626;   /* neutral-800 */
+  --border-default: #404040;  /* neutral-700 */
+  --border-strong: #525252;   /* neutral-600 */
+
+  /* Accent - lighter blue for dark mode */
+  --accent: #60A5FA;          /* blue-400 */
+  --accent-hover: #3B82F6;    /* blue-500 */
+
+  /* Legacy aliases */
+  --primary: var(--accent);
+  --primary-hover: var(--accent-hover);
+  --primary-active: #2563EB;  /* blue-600 */
 
   /* Legacy support */
   --background: var(--surface-0);
   --foreground: var(--text-primary);
 
-  /* Dock glass effect - dark mode (zinc) */
-  --dock-bg: rgba(24, 24, 27, 0.72);
-  --dock-border: rgba(255, 255, 255, 0.08);
-  --dock-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  /* Dock glass effect - dark mode */
+  --dock-bg: rgba(23, 23, 23, 0.8);
+  --dock-border: rgba(255, 255, 255, 0.1);
   --dock-blur: blur(20px) saturate(180%);
-  --dock-tab-inactive: #a1a1aa;
-  --dock-tab-active: #fafafa;
-  --dock-indicator-bg: rgba(255, 255, 255, 0.12);
-  --dock-indicator-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --dock-tab-inactive: #737373;  /* neutral-500 */
+  --dock-tab-active: #FAFAFA;    /* neutral-50 */
+  --dock-indicator-bg: rgba(255, 255, 255, 0.1);
 }
 
 @theme inline {
@@ -87,7 +99,10 @@
 body {
   background: var(--surface-0);
   color: var(--text-primary);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 150ms ease, color 150ms ease;
+  font-family: var(--font-space-grotesk);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Landing page animations */
@@ -172,6 +187,23 @@ html {
 }
 
 /* ============================================
+   PRIMARY BUTTON STYLES
+   ============================================ */
+
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+}
+
+.btn-primary:active:not(:disabled) {
+  background-color: var(--primary-active);
+}
+
+/* ============================================
    GHOST CARD ANIMATIONS - Bento Grid System
    ============================================ */
 
@@ -231,11 +263,11 @@ html {
 .dark .ghost-state {
   background: linear-gradient(
     90deg,
-    #27272a 0%,
-    #3f3f46 25%,
-    #27272a 50%,
-    #3f3f46 75%,
-    #27272a 100%
+    #262626 0%,
+    #404040 25%,
+    #262626 50%,
+    #404040 75%,
+    #262626 100%
   );
   background-size: 200% 100%;
 }
@@ -313,8 +345,28 @@ html {
 }
 
 .dark .bento-card {
-  background: rgba(39, 39, 42, 0.8);
-  border-color: rgba(63, 63, 70, 0.5);
+  background: rgba(38, 38, 38, 0.8);
+  border-color: rgba(64, 64, 64, 0.5);
+}
+
+/* ============================================
+   FAST TRANSITIONS - Linear/Vercel Aesthetic
+   ============================================ */
+
+/* Fast transitions for all elements */
+* {
+  transition-duration: 150ms !important;
+}
+
+/* Preserve keyframe animation durations */
+.animate-fade-in-up,
+.animate-fade-in,
+.animate-slide-in-left,
+.animate-scale-in,
+.animate-pulse,
+.animate-spin,
+[class*="animate-"] {
+  transition-duration: inherit !important;
 }
 
 /* ============================================
@@ -328,4 +380,24 @@ html {
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;  /* Chrome, Safari, Opera */
+}
+
+/* ============================================
+   GRADIENT FLOW ANIMATION - Hero Input
+   ============================================ */
+
+@keyframes gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-flow {
+  animation: gradient-flow 8s ease-in-out infinite;
 }

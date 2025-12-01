@@ -1,6 +1,6 @@
 'use client';
 
-import { Mail, Phone, MessageSquare, ArrowRightLeft } from 'lucide-react';
+import { Mail, Phone, MessageSquare, ArrowRightLeft, FileText, Globe, Send, Clock } from 'lucide-react';
 import type { LeadActivity } from '@/types/database';
 
 interface LeadActivityLogProps {
@@ -9,25 +9,37 @@ interface LeadActivityLogProps {
   maxItems?: number;
 }
 
-const ACTIVITY_ICONS = {
+const ACTIVITY_ICONS: Record<LeadActivity['type'], typeof Mail> = {
   email_sent: Mail,
   call_made: Phone,
   note_added: MessageSquare,
   status_changed: ArrowRightLeft,
+  email_generated: FileText,
+  website_generated: Globe,
+  outreach_sent: Send,
+  follow_up_set: Clock,
 };
 
-const ACTIVITY_COLORS = {
+const ACTIVITY_COLORS: Record<LeadActivity['type'], string> = {
   email_sent: 'text-blue-500 bg-blue-100 dark:bg-blue-900/30',
   call_made: 'text-green-500 bg-green-100 dark:bg-green-900/30',
   note_added: 'text-purple-500 bg-purple-100 dark:bg-purple-900/30',
   status_changed: 'text-orange-500 bg-orange-100 dark:bg-orange-900/30',
+  email_generated: 'text-indigo-500 bg-indigo-100 dark:bg-indigo-900/30',
+  website_generated: 'text-cyan-500 bg-cyan-100 dark:bg-cyan-900/30',
+  outreach_sent: 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/30',
+  follow_up_set: 'text-amber-500 bg-amber-100 dark:bg-amber-900/30',
 };
 
-const ACTIVITY_LABELS = {
+const ACTIVITY_LABELS: Record<LeadActivity['type'], string> = {
   email_sent: 'Email Sent',
   call_made: 'Call Made',
   note_added: 'Note Added',
   status_changed: 'Status Changed',
+  email_generated: 'Email Generated',
+  website_generated: 'Website Generated',
+  outreach_sent: 'Outreach Sent',
+  follow_up_set: 'Follow-up Set',
 };
 
 function formatRelativeTime(dateString: string): string {

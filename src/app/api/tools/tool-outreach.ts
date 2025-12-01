@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import type { OutreachArtifact, OutreachScript, Lead } from '@/types/database';
 
 // ============================================
@@ -15,6 +15,10 @@ export const outreachSchema = z.object({
     companyName: z.string(),
     industry: z.string(),
     painPoints: z.array(z.string()),
+    contactName: z.string().optional(),
+    contactTitle: z.string().optional(),
+    buyingSignals: z.array(z.string()).optional(),
+    suggestedAngle: z.string().optional(),
   })).describe('Leads to generate scripts for'),
 });
 
@@ -287,11 +291,20 @@ function personalizeTemplate(template: string, variables: Record<string, string>
 
 function generateCallScript(
   template: typeof CALL_TEMPLATES['default'],
-  lead: { companyName: string; industry: string; painPoints: string[] },
+  lead: {
+    companyName: string;
+    industry: string;
+    painPoints: string[];
+    contactName?: string;
+    contactTitle?: string;
+    buyingSignals?: string[];
+    suggestedAngle?: string;
+  },
   brandName: string
 ): OutreachScript['callScript'] {
   const primaryPainPoint = lead.painPoints[0] || 'operational challenges';
-  const contactName = 'there'; // Would be personalized with real contact data
+  const contactName = lead.contactName || 'there';
+  const buyingSignal = lead.buyingSignals?.[0] || 'growing';
 
   const variables = {
     contactName,
@@ -300,10 +313,16 @@ function generateCallScript(
     companyName: lead.companyName,
     industry: lead.industry,
     painPoint: primaryPainPoint,
+    buyingSignal,
   };
 
+  // Use suggested angle if available, otherwise use template opener
+  const customOpener = lead.suggestedAngle
+    ? `Hi {contactName}, this is {agentName} from {brandName}. I noticed ${lead.suggestedAngle.toLowerCase()}. Do you have a quick moment?`
+    : template.opener;
+
   return {
-    opener: personalizeTemplate(template.opener, variables),
+    opener: personalizeTemplate(customOpener, variables),
     valueProposition: template.valueProps.map(vp => personalizeTemplate(vp, variables)).join('\n• '),
     questions: template.questions,
     objectionHandlers: Object.fromEntries(
@@ -315,11 +334,20 @@ function generateCallScript(
 
 function generateEmailScript(
   template: typeof EMAIL_TEMPLATES['default'],
-  lead: { companyName: string; industry: string; painPoints: string[] },
+  lead: {
+    companyName: string;
+    industry: string;
+    painPoints: string[];
+    contactName?: string;
+    contactTitle?: string;
+    buyingSignals?: string[];
+    suggestedAngle?: string;
+  },
   brandName: string
 ): OutreachScript['emailScript'] {
   const primaryPainPoint = lead.painPoints[0] || 'growth challenges';
-  const contactName = 'there'; // Would be personalized with real contact data
+  const contactName = lead.contactName || 'there';
+  const buyingSignal = lead.buyingSignals?.[0] || 'growing';
 
   const variables = {
     contactName,
@@ -328,14 +356,25 @@ function generateEmailScript(
     companyName: lead.companyName,
     industry: lead.industry,
     painPoint: primaryPainPoint,
+    buyingSignal,
   };
 
   // Pick a random subject from templates
   const subjectTemplate = template.subjects[Math.floor(Math.random() * template.subjects.length)];
 
+  // Use suggested angle to create more personalized email body if available
+  let customBody = template.bodyTemplate;
+  if (lead.suggestedAngle) {
+    customBody = `Hi {contactName},
+
+I noticed ${lead.suggestedAngle.toLowerCase()}.
+
+${template.bodyTemplate.split('\n\n').slice(1).join('\n\n')}`;
+  }
+
   return {
     subject: personalizeTemplate(subjectTemplate, variables),
-    body: personalizeTemplate(template.bodyTemplate, variables),
+    body: personalizeTemplate(customBody, variables),
     followUp1: personalizeTemplate(template.followUp1, variables),
     followUp2: personalizeTemplate(template.followUp2, variables),
   };
@@ -367,7 +406,10 @@ export async function generateOutreachScripts(params: z.infer<typeof outreachSch
     };
 
     // Save to Supabase
-    const supabase = await createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
     const { data: artifact, error } = await (supabase
       .from('artifacts') as any)
       .upsert(

@@ -37,7 +37,7 @@ export const FEATURES: Feature[] = [
     icon: Zap,
     title: 'Real-Time Generation',
     description: 'Watch as your business comes to life in seconds with live streaming',
-    gradient: 'from-yellow-500 to-orange-500',
+    gradient: 'from-blue-400 to-blue-600',
   },
   {
     icon: Download,

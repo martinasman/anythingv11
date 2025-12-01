@@ -39,16 +39,14 @@ export default function WorkspaceHydration({
   useEffect(() => {
     console.log('[WorkspaceHydration] Checking auto-submit', { initialPrompt, messagesLength: initialMessages.length });
     if (initialPrompt && initialMessages.length === 0) {
-      // Add delay to ensure ChatPanel is mounted and listening
-      const timer = setTimeout(() => {
+      // Dispatch on next frame to ensure ChatPanel has mounted
+      requestAnimationFrame(() => {
         console.log('[WorkspaceHydration] Dispatching autoSubmitPrompt event with:', initialPrompt);
         const event = new CustomEvent('autoSubmitPrompt', {
           detail: { prompt: initialPrompt },
         });
         window.dispatchEvent(event);
-      }, 150);
-
-      return () => clearTimeout(timer);
+      });
     }
   }, [initialPrompt, initialMessages.length]);
 
@@ -95,6 +93,10 @@ export default function WorkspaceHydration({
 
             console.log('[Realtime] Calling updateArtifact:', artifact.type, artifact);
             storeRef.updateArtifact(artifact.type, artifact);
+
+            // NOTE: Don't transition to overview here - let ChatPanel handle it
+            // when all tools complete. This prevents showing overview too early
+            // while tools are still running.
           }
         }
       )

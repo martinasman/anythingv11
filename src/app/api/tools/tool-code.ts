@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { generateText } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import type { WebsiteArtifact } from '@/types/database';
 import { ARCHITECT_SYSTEM_PROMPT } from '@/config/agentPrompts';
 
@@ -106,6 +106,17 @@ SECTIONS TO INCLUDE:
 3. Social proof or testimonials
 4. Final CTA section
 
+CONTACT FORM (CRITICAL - MUST INCLUDE):
+Include a contact form in your CTA section with these exact fields:
+1. Hidden projectId: <input type="hidden" name="projectId" value="__PROJECT_ID__" />
+2. Name field: <input type="text" name="name" required placeholder="Your Name" />
+3. Email field: <input type="email" name="email" required placeholder="your@email.com" />
+4. Company field (optional): <input type="text" name="company" placeholder="Company Name" />
+5. Message field: <textarea name="message" placeholder="How can we help?"></textarea>
+6. Submit button with id="submit-btn"
+
+The form should NOT have an action attribute - JavaScript will handle submission.
+
 ADVANCED FEATURES (MUST INCLUDE):
 CSS (styles.css):
 - Custom animations (fade-in, slide-up, scale effects)
@@ -113,12 +124,13 @@ CSS (styles.css):
 - Gradient backgrounds and glassmorphism
 - Advanced typography styles
 - Professional spacing and layout
+- Form styling with focus states
 
 JavaScript (script.js):
 - Smooth scroll to sections
 - Mobile menu toggle
 - Scroll-triggered animations (elements fade in on scroll)
-- Form validation
+- Form validation and submission (form handler will be injected)
 - Interactive hover effects
 - Loading animations
 
@@ -168,8 +180,72 @@ Return EXACTLY 3 files in this JSON format (NO markdown, NO explanations):
       throw new Error('LLM did not return valid JSON');
     }
 
+    // Post-process files: inject projectId and form handler
+    const apiUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+
+    // Form submission handler to inject into script.js
+    const formHandler = `
+// Form submission handler - connects to CRM
+document.querySelectorAll('form').forEach(form => {
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('button[type="submit"], #submit-btn');
+    const originalText = btn ? btn.textContent : 'Submit';
+
+    try {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+      }
+
+      const formData = new FormData(form);
+      const data = Object.fromEntries(formData.entries());
+
+      const response = await fetch('${apiUrl}/api/leads/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        form.innerHTML = '<div class="text-center p-8"><h3 class="text-xl font-bold text-green-600">Thank you!</h3><p class="text-gray-600 mt-2">We\\'ll be in touch soon.</p></div>';
+      } else {
+        throw new Error(result.error || 'Submission failed');
+      }
+    } catch (err) {
+      console.error('Form submission error:', err);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+      alert('Something went wrong. Please try again.');
+    }
+  });
+});
+`;
+
+    // Process each file
+    websiteData.files = websiteData.files.map(file => {
+      let content = file.content;
+
+      // Replace projectId placeholder
+      content = content.replace(/__PROJECT_ID__/g, projectId);
+
+      // Inject form handler at the end of script.js
+      if (file.path === '/script.js') {
+        content = content + '\n\n' + formHandler;
+      }
+
+      return { ...file, content };
+    });
+
     // Save to Supabase with UPSERT for updates
-    const supabase = await createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
     const { data: artifact, error } = await (supabase
       .from('artifacts') as any)
       .upsert(

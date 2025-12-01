@@ -1,19 +1,12 @@
 'use client';
 
-import { Moon, Sun, Rocket, LayoutGrid, Sparkles, Users, Globe, DollarSign } from 'lucide-react';
+import { Moon, Sun, Rocket, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTheme } from 'next-themes';
-import { useEffect, useState, useRef } from 'react';
-import { useProjectStore, type WorkspaceView } from '@/store/projectStore';
+import { useEffect, useState } from 'react';
+import { useProjectStore } from '@/store/projectStore';
 
-const NAV_TABS = [
-  { id: 'HOME' as const, label: 'Home', icon: LayoutGrid, shortcut: '1' },
-  { id: 'BRAND' as const, label: 'Brand', icon: Sparkles, shortcut: '2' },
-  { id: 'CRM' as const, label: 'Leads', icon: Users, shortcut: '3' },
-  { id: 'SITE' as const, label: 'Site', icon: Globe, shortcut: '4' },
-  { id: 'FINANCE' as const, label: 'Offer', icon: DollarSign, shortcut: '5' },
-];
 
 interface ToolbarProps {
   projectName?: string;
@@ -22,55 +15,18 @@ interface ToolbarProps {
 export default function Toolbar({ projectName = 'New Project' }: ToolbarProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const { workspaceView, setWorkspaceView, hasStartedGeneration } = useProjectStore();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const tabRefs = useRef<Map<WorkspaceView, HTMLButtonElement>>(new Map());
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
+  const { canvasState, setCanvasState } = useProjectStore();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Update sliding indicator position
-  useEffect(() => {
-    if (!hasStartedGeneration) return;
-    const activeTab = tabRefs.current.get(workspaceView);
-    if (activeTab && containerRef.current) {
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const tabRect = activeTab.getBoundingClientRect();
-      setIndicatorStyle({
-        left: tabRect.left - containerRect.left,
-        width: tabRect.width,
-      });
-    }
-  }, [workspaceView, hasStartedGeneration, mounted]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    if (!hasStartedGeneration) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const modifierKey = event.metaKey || event.ctrlKey;
-      if (!modifierKey) return;
-
-      const target = event.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return;
-      }
-
-      const tab = NAV_TABS.find(t => t.shortcut === event.key);
-      if (tab) {
-        event.preventDefault();
-        setWorkspaceView(tab.id);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setWorkspaceView, hasStartedGeneration]);
-
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+
+  const handleBackToOverview = () => {
+    setCanvasState({ type: 'overview' });
   };
 
   return (
@@ -99,49 +55,25 @@ export default function Toolbar({ projectName = 'New Project' }: ToolbarProps) {
           <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
             {projectName}
           </span>
+
+          {/* Back to Overview Button - Only show when not on overview */}
+          {canvasState.type !== 'overview' && canvasState.type !== 'empty' && (
+            <>
+              <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700" />
+              <button
+                onClick={handleBackToOverview}
+                className="flex items-center gap-1.5 px-2 h-7 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+                aria-label="Back to Overview"
+              >
+                <ArrowLeft size={14} strokeWidth={1.5} />
+                <span>Overview</span>
+              </button>
+            </>
+          )}
         </div>
 
-        {/* Center Section - Navigation Tabs (only show after generation starts) */}
-        {hasStartedGeneration && (
-          <div
-            ref={containerRef}
-            className="relative flex items-center gap-0.5 p-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800"
-          >
-            {/* Sliding indicator */}
-            <div
-              className="absolute top-0.5 bottom-0.5 rounded-md bg-white dark:bg-zinc-700 shadow-sm transition-all duration-200 ease-out"
-              style={{
-                left: indicatorStyle.left,
-                width: indicatorStyle.width,
-              }}
-            />
-
-            {/* Tabs */}
-            {NAV_TABS.map(tab => {
-              const Icon = tab.icon;
-              const isActive = workspaceView === tab.id;
-
-              return (
-                <button
-                  key={tab.id}
-                  ref={el => {
-                    if (el) tabRefs.current.set(tab.id, el);
-                  }}
-                  onClick={() => setWorkspaceView(tab.id)}
-                  className={`relative z-10 flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-150 ${
-                    isActive
-                      ? 'text-zinc-900 dark:text-zinc-100'
-                      : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
-                  }`}
-                  title={`${tab.label} (${navigator?.platform?.includes('Mac') ? '⌘' : 'Ctrl+'}${tab.shortcut})`}
-                >
-                  <Icon size={14} />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* Center Section - Empty (spacer) */}
+        <div className="flex-1" />
 
         {/* Right Section - Theme & Publish */}
         <div className="flex items-center gap-1.5">

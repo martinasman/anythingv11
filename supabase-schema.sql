@@ -205,10 +205,203 @@ ALTER PUBLICATION supabase_realtime ADD TABLE artifacts;
 -- SELECT id FROM projects WHERE name = 'Coffee Shop Website';
 
 -- ============================================
+-- LEADS TABLE (CRM)
+-- ============================================
+-- Stores individual leads with full CRM functionality
+CREATE TABLE IF NOT EXISTS leads (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+
+  -- Basic Info
+  company_name TEXT NOT NULL,
+  industry TEXT,
+
+  -- Contact Information
+  website TEXT,
+  phone TEXT,
+  address TEXT,
+  contact_name TEXT,
+  contact_email TEXT,
+  contact_linkedin TEXT,
+  contact_title TEXT,
+
+  -- Google Maps Data
+  place_id TEXT,
+  rating DECIMAL(2,1),
+  review_count INTEGER,
+  coordinates JSONB,
+
+  -- Website Analysis
+  website_analysis JSONB,
+
+  -- Scoring (1-100)
+  score INTEGER CHECK (score >= 0 AND score <= 100),
+  score_breakdown TEXT[],
+  pain_points TEXT[],
+
+  -- Legacy ICP fields (for backwards compatibility)
+  icp_score INTEGER DEFAULT 0,
+  icp_match_reasons TEXT[],
+  buying_signals TEXT[],
+  suggested_angle TEXT,
+
+  -- CRM Fields
+  status TEXT DEFAULT 'new' CHECK (status IN ('new', 'contacted', 'responded', 'closed', 'lost')),
+  notes JSONB DEFAULT '[]',
+  follow_up_date TIMESTAMPTZ,
+  last_contacted_at TIMESTAMPTZ,
+  priority TEXT DEFAULT 'medium' CHECK (priority IN ('high', 'medium', 'low')),
+  tags TEXT[],
+
+  -- Generated Content References
+  preview_token TEXT,
+  outreach_generated BOOLEAN DEFAULT FALSE,
+  outreach_data JSONB,
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add indexes for faster queries
+CREATE INDEX IF NOT EXISTS idx_leads_project ON leads(project_id);
+CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+CREATE INDEX IF NOT EXISTS idx_leads_score ON leads(score DESC);
+CREATE INDEX IF NOT EXISTS idx_leads_follow_up ON leads(follow_up_date) WHERE follow_up_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_priority ON leads(priority);
+
+-- Trigger for leads table
+DROP TRIGGER IF EXISTS update_leads_updated_at ON leads;
+CREATE TRIGGER update_leads_updated_at
+  BEFORE UPDATE ON leads
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- LEAD WEBSITES TABLE
+-- ============================================
+-- Stores generated website previews for leads (with 30-day expiration)
+CREATE TABLE IF NOT EXISTS lead_websites (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  preview_token TEXT UNIQUE NOT NULL,
+  data JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days')
+);
+
+-- Add indexes for faster queries
+CREATE INDEX IF NOT EXISTS idx_lead_websites_token ON lead_websites(preview_token);
+CREATE INDEX IF NOT EXISTS idx_lead_websites_project ON lead_websites(project_id);
+CREATE INDEX IF NOT EXISTS idx_lead_websites_lead ON lead_websites(lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_websites_expires ON lead_websites(expires_at);
+
+-- ============================================
+-- LEAD ACTIVITIES TABLE
+-- ============================================
+-- Tracks all activities for leads (notes, status changes, emails, etc.)
+CREATE TABLE IF NOT EXISTS lead_activities (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('note_added', 'status_changed', 'email_generated', 'website_generated', 'outreach_sent', 'call_made', 'follow_up_set')),
+  content TEXT,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add indexes for faster queries
+CREATE INDEX IF NOT EXISTS idx_activities_lead ON lead_activities(lead_id);
+CREATE INDEX IF NOT EXISTS idx_activities_type ON lead_activities(type);
+CREATE INDEX IF NOT EXISTS idx_activities_created ON lead_activities(created_at DESC);
+
+-- ============================================
+-- RLS POLICIES FOR NEW TABLES
+-- ============================================
+
+-- Enable RLS on new tables
+ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lead_websites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lead_activities ENABLE ROW LEVEL SECURITY;
+
+-- Leads policies
+DROP POLICY IF EXISTS "Allow public read access to leads" ON leads;
+CREATE POLICY "Allow public read access to leads"
+  ON leads FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Allow public insert access to leads" ON leads;
+CREATE POLICY "Allow public insert access to leads"
+  ON leads FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public update access to leads" ON leads;
+CREATE POLICY "Allow public update access to leads"
+  ON leads FOR UPDATE
+  USING (true);
+
+DROP POLICY IF EXISTS "Allow public delete access to leads" ON leads;
+CREATE POLICY "Allow public delete access to leads"
+  ON leads FOR DELETE
+  USING (true);
+
+-- Lead websites policies
+DROP POLICY IF EXISTS "Allow public read access to lead_websites" ON lead_websites;
+CREATE POLICY "Allow public read access to lead_websites"
+  ON lead_websites FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Allow public insert access to lead_websites" ON lead_websites;
+CREATE POLICY "Allow public insert access to lead_websites"
+  ON lead_websites FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public update access to lead_websites" ON lead_websites;
+CREATE POLICY "Allow public update access to lead_websites"
+  ON lead_websites FOR UPDATE
+  USING (true);
+
+DROP POLICY IF EXISTS "Allow public delete access to lead_websites" ON lead_websites;
+CREATE POLICY "Allow public delete access to lead_websites"
+  ON lead_websites FOR DELETE
+  USING (true);
+
+-- Lead activities policies
+DROP POLICY IF EXISTS "Allow public read access to lead_activities" ON lead_activities;
+CREATE POLICY "Allow public read access to lead_activities"
+  ON lead_activities FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Allow public insert access to lead_activities" ON lead_activities;
+CREATE POLICY "Allow public insert access to lead_activities"
+  ON lead_activities FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public delete access to lead_activities" ON lead_activities;
+CREATE POLICY "Allow public delete access to lead_activities"
+  ON lead_activities FOR DELETE
+  USING (true);
+
+-- ============================================
+-- ENABLE REALTIME FOR NEW TABLES
+-- ============================================
+ALTER PUBLICATION supabase_realtime ADD TABLE leads;
+ALTER PUBLICATION supabase_realtime ADD TABLE lead_activities;
+
+-- ============================================
+-- CLEANUP FUNCTION FOR EXPIRED LEAD WEBSITES
+-- ============================================
+-- Run this periodically via cron or Supabase Edge Function
+-- DELETE FROM lead_websites WHERE expires_at < NOW();
+
+-- ============================================
 -- CLEANUP (IF NEEDED)
 -- ============================================
 -- Uncomment these ONLY if you want to completely reset the database
 
+-- DROP TABLE IF EXISTS lead_activities CASCADE;
+-- DROP TABLE IF EXISTS lead_websites CASCADE;
+-- DROP TABLE IF EXISTS leads CASCADE;
 -- DROP TABLE IF EXISTS artifacts CASCADE;
 -- DROP TABLE IF EXISTS messages CASCADE;
 -- DROP TABLE IF EXISTS projects CASCADE;
